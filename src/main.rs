@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 use std::process;
 
 mod cert;
@@ -174,6 +174,17 @@ enum Commands {
         /// One or more hostnames (or host:port)
         hosts: Vec<String>,
     },
+
+    /// Generate shell completions
+    #[command(hide = true)]
+    Completions {
+        /// Shell type: bash, zsh, fish, powershell
+        shell: clap_complete::Shell,
+    },
+
+    /// Generate man page
+    #[command(hide = true)]
+    Manpage,
 }
 
 fn main() {
@@ -286,6 +297,16 @@ fn run(cli: Cli) -> anyhow::Result<i32> {
             commands::grade::run(&host, port, cli.json, cli.no_color)
         }
         Commands::Expiry { hosts } => commands::expiry::run(&hosts, cli.json, cli.no_color),
+        Commands::Completions { shell } => {
+            clap_complete::generate(shell, &mut Cli::command(), "sslx", &mut std::io::stdout());
+            Ok(0)
+        }
+        Commands::Manpage => {
+            let cmd = Cli::command();
+            let man = clap_mangen::Man::new(cmd);
+            man.render(&mut std::io::stdout())?;
+            Ok(0)
+        }
     }
 }
 
