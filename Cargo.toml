@@ -16,7 +16,7 @@ clap_complete = "4"
 clap_mangen = "0.3"
 
 # Certificate parsing & generation
-x509-parser = { version = "0.16", features = ["verify"] }
+x509-parser = { version = "0.18", features = ["verify"] }
 rcgen = "0.13"
 
 # TLS
