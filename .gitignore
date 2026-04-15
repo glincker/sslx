@@ -1,0 +1,9 @@
+/target
+*.pem
+*.der
+*.p12
+*.pfx
+.DS_Store
+docs/superpowers/
+docs-local/
+CLAUDE.md

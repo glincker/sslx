@@ -1,0 +1,57 @@
+[package]
+name = "sslx"
+version = "0.3.1"
+edition = "2021"
+description = "The modern way to work with certificates and TLS"
+license = "MIT"
+repository = "https://github.com/glincker/sslx"
+homepage = "https://github.com/glincker/sslx"
+keywords = ["tls", "ssl", "certificate", "x509", "openssl"]
+categories = ["command-line-utilities", "cryptography"]
+
+[dependencies]
+# CLI
+clap = { version = "4", features = ["derive"] }
+clap_complete = "4"
+clap_mangen = "0.2"
+
+# Certificate parsing & generation
+x509-parser = { version = "0.16", features = ["verify"] }
+rcgen = "0.13"
+
+# TLS
+rustls = "0.23"
+webpki-roots = "0.26"
+
+# Serialization (--json output)
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# PKCS12 parsing
+p12 = "0.6"
+
+# Error handling
+anyhow = "1"
+
+# Base64 decoding
+base64 = "0.22"
+
+# SHA-256 (ring is already pulled in by rustls, just making it explicit)
+ring = "0.17"
+
+# Time (used by rcgen, shared dep)
+time = "0.3"
+
+[dev-dependencies]
+tempfile = "3"
+serde_json = "1"
+
+[[bench]]
+name = "benchmark"
+harness = false
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

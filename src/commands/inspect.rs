@@ -1,0 +1,38 @@
+use anyhow::Result;
+
+use crate::cert::parser::parse_cert_file;
+use crate::output::colors;
+use crate::output::json::JsonCert;
+use crate::output::json::JsonCertOutput;
+use crate::output::terminal;
+
+pub fn run(path: &str, json: bool, no_color: bool) -> Result<i32> {
+    let certs = parse_cert_file(path)?;
+    let use_color = !no_color && !json && colors::should_color();
+
+    if json {
+        let output = JsonCertOutput {
+            certificates: certs.iter().map(JsonCert::from).collect(),
+        };
+        println!("{}", serde_json::to_string_pretty(&output)?);
+        return Ok(exit_code_for_certs(&certs));
+    }
+
+    let total = certs.len();
+    for (i, cert) in certs.iter().enumerate() {
+        println!("{}", terminal::render_cert(cert, i, total, use_color));
+        if i < total - 1 {
+            println!("{}", terminal::render_chain_arrow(use_color));
+        }
+    }
+
+    Ok(exit_code_for_certs(&certs))
+}
+
+fn exit_code_for_certs(certs: &[crate::cert::CertInfo]) -> i32 {
+    if certs.iter().any(|c| c.is_expired()) {
+        1 // expired
+    } else {
+        0 // valid
+    }
+}
