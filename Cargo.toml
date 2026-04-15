@@ -13,7 +13,7 @@ categories = ["command-line-utilities", "cryptography"]
 # CLI
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
-clap_mangen = "0.2"
+clap_mangen = "0.3"
 
 # Certificate parsing & generation
 x509-parser = { version = "0.16", features = ["verify"] }
