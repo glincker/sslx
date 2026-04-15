@@ -1,6 +1,6 @@
 # Security
 
-Found a vulnerability? Email gdsksdeveloper@gmail.com instead of opening a public issue.
+Found a vulnerability? Email support@glincker.com instead of opening a public issue.
 
 Tell me what you found, how to reproduce it, and how bad you think it is. I'll get back to you within 48 hours.
 
