@@ -14,6 +14,7 @@ use output::util::parse_host_port;
     version,
     after_help = "Examples:\n  \
         sslx inspect cert.pem          Read a certificate file\n  \
+        sslx inspect -                 Read a certificate from stdin\n  \
         sslx connect google.com        Test TLS connection\n  \
         sslx verify cert.pem --ca ca   Validate certificate chain\n  \
         sslx generate --cn localhost   Create a self-signed cert"
@@ -35,7 +36,7 @@ struct Cli {
 enum Commands {
     /// Read and display certificate file details
     Inspect {
-        /// Path to certificate file (PEM, DER, or PKCS12)
+        /// Path to certificate file (PEM or DER), or - to read from stdin
         file: String,
     },
 
@@ -161,7 +162,7 @@ enum Commands {
 
     /// Auto-detect and decode any crypto file (cert, key, CSR, JWT)
     Decode {
-        /// File path or inline string (e.g., JWT token)
+        /// File path, inline string (e.g., JWT token), or - to read from stdin
         input: String,
     },
 

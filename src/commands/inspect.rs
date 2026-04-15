@@ -1,13 +1,25 @@
 use anyhow::Result;
+use std::io::Read;
 
-use crate::cert::parser::parse_cert_file;
+use crate::cert::parser::{parse_cert_data, parse_cert_file};
 use crate::output::colors;
 use crate::output::json::JsonCert;
 use crate::output::json::JsonCertOutput;
 use crate::output::terminal;
 
 pub fn run(path: &str, json: bool, no_color: bool) -> Result<i32> {
-    let certs = parse_cert_file(path)?;
+    let certs = if path == "-" {
+        let mut buf = Vec::new();
+        std::io::stdin().read_to_end(&mut buf)?;
+        parse_cert_data(&buf)?
+    } else {
+        parse_cert_file(path)?
+    };
+    run_certs(&certs, json, no_color)
+}
+
+/// Render already-parsed certs (used by `decode` to avoid re-reading the source).
+pub fn run_certs(certs: &[crate::cert::CertInfo], json: bool, no_color: bool) -> Result<i32> {
     let use_color = !no_color && !json && colors::should_color();
 
     if json {
@@ -15,7 +27,7 @@ pub fn run(path: &str, json: bool, no_color: bool) -> Result<i32> {
             certificates: certs.iter().map(JsonCert::from).collect(),
         };
         println!("{}", serde_json::to_string_pretty(&output)?);
-        return Ok(exit_code_for_certs(&certs));
+        return Ok(exit_code_for_certs(certs));
     }
 
     let total = certs.len();
@@ -26,7 +38,7 @@ pub fn run(path: &str, json: bool, no_color: bool) -> Result<i32> {
         }
     }
 
-    Ok(exit_code_for_certs(&certs))
+    Ok(exit_code_for_certs(certs))
 }
 
 fn exit_code_for_certs(certs: &[crate::cert::CertInfo]) -> i32 {

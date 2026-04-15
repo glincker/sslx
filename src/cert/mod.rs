@@ -126,7 +126,7 @@ impl fmt::Display for CertTime {
 }
 
 /// Convert days since Unix epoch to (year, month, day)
-fn days_to_ymd(days: i32) -> (i32, u8, u8) {
+pub(crate) fn days_to_ymd(days: i32) -> (i32, u8, u8) {
     // Algorithm from http://howardhinnant.github.io/date_algorithms.html
     let z = days + 719468;
     let era = if z >= 0 { z } else { z - 146096 } / 146097;
@@ -139,4 +139,107 @@ fn days_to_ymd(days: i32) -> (i32, u8, u8) {
     let m = if mp < 10 { mp + 3 } else { mp - 9 } as u8;
     let y = if m <= 2 { y + 1 } else { y };
     (y, m, d)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── days_to_ymd ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_days_to_ymd_epoch() {
+        // Day 0 = 1970-01-01
+        assert_eq!(days_to_ymd(0), (1970, 1, 1));
+    }
+
+    #[test]
+    fn test_days_to_ymd_known_dates() {
+        // 2000-01-01 = 10957 days after epoch
+        assert_eq!(days_to_ymd(10957), (2000, 1, 1));
+        // 19796 days from epoch = 2024-03-14
+        assert_eq!(days_to_ymd(19796), (2024, 3, 14));
+    }
+
+    #[test]
+    fn test_days_to_ymd_leap_year_feb29() {
+        // 2000-02-29 (leap year)
+        assert_eq!(days_to_ymd(11016), (2000, 2, 29));
+    }
+
+    #[test]
+    fn test_days_to_ymd_end_of_year() {
+        // 2023-12-31 = 19722 days after epoch
+        assert_eq!(days_to_ymd(19722), (2023, 12, 31));
+    }
+
+    // ── CertTime::from_timestamp ──────────────────────────────────────────────
+
+    #[test]
+    fn test_certtime_from_timestamp_epoch() {
+        let t = CertTime::from_timestamp(0);
+        assert_eq!(t.timestamp, 0);
+        assert_eq!(t.year, 1970);
+        assert_eq!(t.month, 1);
+        assert_eq!(t.day, 1);
+        assert_eq!(t.hour, 0);
+        assert_eq!(t.min, 0);
+        assert_eq!(t.sec, 0);
+    }
+
+    #[test]
+    fn test_certtime_from_timestamp_known() {
+        // 1710502496 = 2024-03-15 11:34:56 UTC
+        let ts = 1710502496_i64;
+        let t = CertTime::from_timestamp(ts);
+        assert_eq!(t.year, 2024);
+        assert_eq!(t.month, 3);
+        assert_eq!(t.day, 15);
+        assert_eq!(t.hour, 11);
+        assert_eq!(t.min, 34);
+        assert_eq!(t.sec, 56);
+    }
+
+    #[test]
+    fn test_certtime_from_timestamp_midnight() {
+        // A known midnight: 2020-01-01 00:00:00 = 1577836800
+        let t = CertTime::from_timestamp(1577836800);
+        assert_eq!(t.year, 2020);
+        assert_eq!(t.month, 1);
+        assert_eq!(t.day, 1);
+        assert_eq!(t.hour, 0);
+        assert_eq!(t.min, 0);
+        assert_eq!(t.sec, 0);
+    }
+
+    // ── CertTime::format ──────────────────────────────────────────────────────
+
+    #[test]
+    fn test_certtime_format_iso() {
+        let t = CertTime::from_timestamp(0);
+        assert_eq!(t.format("%Y-%m-%d"), "1970-01-01");
+        assert_eq!(t.format("%H:%M:%S"), "00:00:00");
+    }
+
+    #[test]
+    fn test_certtime_format_combined() {
+        let t = CertTime::from_timestamp(1710502496);
+        assert_eq!(t.format("%Y-%m-%d %H:%M:%S"), "2024-03-15 11:34:56");
+    }
+
+    #[test]
+    fn test_certtime_format_zero_padding() {
+        // 946857903 = 2000-01-03 00:05:03 UTC
+        let ts = 946_857_903_i64;
+        let t = CertTime::from_timestamp(ts);
+        let formatted = t.format("%Y-%m-%d %H:%M:%S");
+        assert_eq!(&formatted[5..7], "01"); // month
+        assert_eq!(&formatted[8..10], "03"); // day
+    }
+
+    #[test]
+    fn test_certtime_display() {
+        let t = CertTime::from_timestamp(0);
+        assert_eq!(t.to_string(), "1970-01-01 00:00:00");
+    }
 }

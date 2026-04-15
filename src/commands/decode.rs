@@ -1,12 +1,17 @@
 use anyhow::{Context, Result};
+use std::io::Read;
 
 use crate::output::{box_chars, colors};
 
 pub fn run(input: &str, json: bool, no_color: bool) -> Result<i32> {
     let use_color = !no_color && !json && colors::should_color();
 
-    // Check if input is a file path or inline string
-    let (data, source) = if std::path::Path::new(input).exists() {
+    // Check if input is stdin, a file path, or inline string
+    let (data, source) = if input == "-" {
+        let mut buf = Vec::new();
+        std::io::stdin().read_to_end(&mut buf)?;
+        (buf, "<stdin>".to_string())
+    } else if std::path::Path::new(input).exists() {
         let data = std::fs::read(input).with_context(|| format!("Failed to read: {}", input))?;
         (data, input.to_string())
     } else {
@@ -18,7 +23,7 @@ pub fn run(input: &str, json: bool, no_color: bool) -> Result<i32> {
 
     // Try to detect the type
     if text.starts_with("-----BEGIN CERTIFICATE") {
-        return decode_as_cert(input, json, no_color, use_color, "PEM Certificate");
+        return decode_as_cert(&data, &source, json, no_color, use_color, "PEM Certificate");
     }
 
     if text.starts_with("-----BEGIN CERTIFICATE REQUEST")
@@ -53,7 +58,7 @@ pub fn run(input: &str, json: bool, no_color: bool) -> Result<i32> {
 
     // DER certificate
     if !data.is_empty() && data[0] == 0x30 && source != "inline" {
-        return decode_as_cert(input, json, no_color, use_color, "DER Certificate");
+        return decode_as_cert(&data, &source, json, no_color, use_color, "DER Certificate");
     }
 
     if json {
@@ -83,7 +88,8 @@ pub fn run(input: &str, json: bool, no_color: bool) -> Result<i32> {
 }
 
 fn decode_as_cert(
-    path: &str,
+    data: &[u8],
+    source: &str,
     json: bool,
     no_color: bool,
     use_color: bool,
@@ -94,7 +100,8 @@ fn decode_as_cert(
     } else {
         println!("\n  Detected: {}\n", label);
     }
-    crate::commands::inspect::run(path, json, no_color)
+    let certs = crate::cert::parser::parse_cert_data_from(data, source)?;
+    crate::commands::inspect::run_certs(&certs, json, no_color)
 }
 
 fn decode_as_csr(text: &str, json: bool, use_color: bool) -> Result<i32> {
