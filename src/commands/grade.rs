@@ -334,7 +334,7 @@ struct Finding {
     detail: String,
 }
 
-fn score_to_grade(score: i32) -> &'static str {
+pub(crate) fn score_to_grade(score: i32) -> &'static str {
     match score {
         95..=100 => "A+",
         90..=94 => "A",
@@ -342,5 +342,65 @@ fn score_to_grade(score: i32) -> &'static str {
         70..=79 => "C",
         60..=69 => "D",
         _ => "F",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── score_to_grade boundary values ────────────────────────────────────────
+
+    #[test]
+    fn test_grade_a_plus_boundaries() {
+        assert_eq!(score_to_grade(100), "A+");
+        assert_eq!(score_to_grade(95), "A+");
+    }
+
+    #[test]
+    fn test_grade_a_boundaries() {
+        assert_eq!(score_to_grade(94), "A");
+        assert_eq!(score_to_grade(90), "A");
+    }
+
+    #[test]
+    fn test_grade_b_boundaries() {
+        assert_eq!(score_to_grade(89), "B");
+        assert_eq!(score_to_grade(80), "B");
+    }
+
+    #[test]
+    fn test_grade_c_boundaries() {
+        assert_eq!(score_to_grade(79), "C");
+        assert_eq!(score_to_grade(70), "C");
+    }
+
+    #[test]
+    fn test_grade_d_boundaries() {
+        assert_eq!(score_to_grade(69), "D");
+        assert_eq!(score_to_grade(60), "D");
+    }
+
+    #[test]
+    fn test_grade_f_boundaries() {
+        assert_eq!(score_to_grade(59), "F");
+        assert_eq!(score_to_grade(0), "F");
+    }
+
+    #[test]
+    fn test_grade_f_negative_score() {
+        // score is clamped to 0 in run(), but the function itself should handle negatives
+        assert_eq!(score_to_grade(-1), "F");
+        assert_eq!(score_to_grade(-100), "F");
+    }
+
+    #[test]
+    fn test_grade_midpoints() {
+        assert_eq!(score_to_grade(97), "A+");
+        assert_eq!(score_to_grade(92), "A");
+        assert_eq!(score_to_grade(85), "B");
+        assert_eq!(score_to_grade(75), "C");
+        assert_eq!(score_to_grade(65), "D");
+        assert_eq!(score_to_grade(30), "F");
     }
 }

@@ -15,17 +15,26 @@ fn format_hex(bytes: &[u8]) -> String {
 
 pub fn parse_cert_file(path: &str) -> Result<Vec<CertInfo>> {
     let data = std::fs::read(path).with_context(|| format!("can't read {}", path))?;
+    parse_cert_data_with_source(&data, path)
+}
 
-    if is_pem(&data) {
-        parse_pem_certs(&data)
-    } else if is_der(&data) {
-        parse_der_cert(&data).map(|c| vec![c])
+/// Parse certificate(s) from raw bytes (PEM or DER).
+/// Use this when data is already in memory (e.g. read from stdin).
+pub fn parse_cert_data(data: &[u8]) -> Result<Vec<CertInfo>> {
+    parse_cert_data_with_source(data, "<stdin>")
+}
+
+fn parse_cert_data_with_source(data: &[u8], source: &str) -> Result<Vec<CertInfo>> {
+    if is_pem(data) {
+        parse_pem_certs(data)
+    } else if is_der(data) {
+        parse_der_cert(data).map(|c| vec![c])
     } else {
         bail!(
             "Unrecognized certificate format in '{}'. Expected PEM or DER.\n\
              Hint: PEM files start with '-----BEGIN CERTIFICATE-----'\n\
              Hint: For PKCS12 (.p12/.pfx), use --pkcs12 flag",
-            path
+            source
         )
     }
 }
@@ -231,3 +240,156 @@ fn sha256_hex(data: &[u8]) -> String {
 }
 
 // TODO: support PKCS8 encrypted private keys
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── helpers ──────────────────────────────────────────────────────────────
+
+    /// Build a minimal self-signed DER certificate using rcgen.
+    fn make_self_signed_der(cn: &str, sans: &[&str]) -> Vec<u8> {
+        use rcgen::{CertificateParams, DistinguishedName, DnType, SanType};
+
+        let mut params = CertificateParams::default();
+        let mut dn = DistinguishedName::new();
+        dn.push(DnType::CommonName, cn);
+        params.distinguished_name = dn;
+        params.subject_alt_names = sans
+            .iter()
+            .map(|s| SanType::DnsName(s.to_string().try_into().unwrap()))
+            .collect();
+
+        let kp = rcgen::KeyPair::generate().unwrap();
+        let cert = params.self_signed(&kp).unwrap();
+        cert.der().to_vec()
+    }
+
+    /// Wrap DER bytes in a PEM block.
+    fn der_to_pem(der: &[u8]) -> Vec<u8> {
+        use base64::Engine;
+        let b64 = base64::engine::general_purpose::STANDARD.encode(der);
+        let mut pem = String::from("-----BEGIN CERTIFICATE-----\n");
+        for chunk in b64.as_bytes().chunks(64) {
+            pem.push_str(std::str::from_utf8(chunk).unwrap());
+            pem.push('\n');
+        }
+        pem.push_str("-----END CERTIFICATE-----\n");
+        pem.into_bytes()
+    }
+
+    // ── parse_pem_certs ───────────────────────────────────────────────────────
+
+    #[test]
+    fn test_parse_pem_single_cert() {
+        let der = make_self_signed_der("example.com", &["example.com"]);
+        let pem = der_to_pem(&der);
+
+        let certs = parse_pem_certs(&pem).unwrap();
+        assert_eq!(certs.len(), 1);
+        assert!(certs[0].subject.contains("example.com"));
+    }
+
+    #[test]
+    fn test_parse_pem_bundle_multiple_certs() {
+        let der1 = make_self_signed_der("first.example.com", &["first.example.com"]);
+        let der2 = make_self_signed_der("second.example.com", &["second.example.com"]);
+        let mut bundle = der_to_pem(&der1);
+        bundle.extend(der_to_pem(&der2));
+
+        let certs = parse_pem_certs(&bundle).unwrap();
+        assert_eq!(certs.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_pem_empty_returns_error() {
+        let result = parse_pem_certs(b"");
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("No certificates"));
+    }
+
+    #[test]
+    fn test_parse_pem_invalid_base64_returns_error() {
+        let bad =
+            b"-----BEGIN CERTIFICATE-----\n!!!not-valid-base64!!!\n-----END CERTIFICATE-----\n";
+        let result = parse_pem_certs(bad);
+        assert!(result.is_err());
+    }
+
+    // ── parse_der_cert ────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_parse_der_cert_roundtrip() {
+        let der = make_self_signed_der("der-test.example.com", &["der-test.example.com"]);
+        let cert = parse_der_cert(&der).unwrap();
+
+        assert!(cert.subject.contains("der-test.example.com"));
+        assert!(cert.issuer.contains("der-test.example.com")); // self-signed
+        assert!(cert.sans.contains(&"der-test.example.com".to_string()));
+        assert!(!cert.sha256_fingerprint.is_empty());
+    }
+
+    #[test]
+    fn test_parse_der_cert_invalid_returns_error() {
+        let garbage = b"\x30\x00\x00\x00junk-data-that-is-not-a-cert";
+        let result = parse_der_cert(garbage);
+        assert!(result.is_err());
+    }
+
+    // ── sha256_of ─────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_sha256_of_known_input() {
+        // SHA-256("") = e3b0c44298fc1c149afbf4c8996fb924...
+        let hash = sha256_of(b"");
+        assert!(hash.starts_with("E3:B0:C4:42:98:FC:1C:14"));
+    }
+
+    #[test]
+    fn test_sha256_of_hello_world() {
+        // SHA-256("hello world") starts with b94d27b9...
+        let hash = sha256_of(b"hello world");
+        assert!(hash.starts_with("B9:4D:27:B9"));
+    }
+
+    #[test]
+    fn test_sha256_format_is_colon_separated_uppercase_hex() {
+        let hash = sha256_of(b"test");
+        let parts: Vec<&str> = hash.split(':').collect();
+        assert_eq!(parts.len(), 32); // SHA-256 = 32 bytes
+        for part in parts {
+            assert_eq!(part.len(), 2);
+            assert!(part.chars().all(|c| c.is_ascii_hexdigit()));
+        }
+    }
+
+    // ── base64_decode_str ─────────────────────────────────────────────────────
+
+    #[test]
+    fn test_base64_decode_valid() {
+        // "hello" in base64
+        let decoded = base64_decode_str("aGVsbG8=").unwrap();
+        assert_eq!(decoded, b"hello");
+    }
+
+    #[test]
+    fn test_base64_decode_empty_string() {
+        let decoded = base64_decode_str("").unwrap();
+        assert!(decoded.is_empty());
+    }
+
+    #[test]
+    fn test_base64_decode_invalid_returns_error() {
+        let result = base64_decode_str("!!!not-valid!!!");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_base64_decode_with_whitespace_padding() {
+        // Leading/trailing whitespace should be trimmed and still parse
+        let result = base64_decode_str("  aGVsbG8=  ");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), b"hello");
+    }
+}

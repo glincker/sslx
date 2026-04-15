@@ -78,3 +78,114 @@ pub fn expiry_display(days_remaining: i64, use_color: bool) -> String {
         format!("{}  {} [{}]", bar, label, icon)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── expiry_display (no-color mode for deterministic output) ───────────────
+
+    #[test]
+    fn test_expiry_display_expired() {
+        let out = expiry_display(-5, false);
+        assert!(out.contains("EXPIRED"), "expected 'EXPIRED' in: {}", out);
+        assert!(
+            out.contains("5 days ago"),
+            "expected '5 days ago' in: {}",
+            out
+        );
+        assert!(
+            out.contains(box_chars::CROSS),
+            "expected CROSS icon in: {}",
+            out
+        );
+    }
+
+    #[test]
+    fn test_expiry_display_zero_days() {
+        let out = expiry_display(0, false);
+        // 0 days is within the <=7 threshold — critical expiry
+        assert!(out.contains("EXPIRING"), "expected 'EXPIRING' in: {}", out);
+        assert!(out.contains("0 days"), "expected '0 days' in: {}", out);
+    }
+
+    #[test]
+    fn test_expiry_display_seven_days() {
+        let out = expiry_display(7, false);
+        assert!(out.contains("EXPIRING"), "expected 'EXPIRING' in: {}", out);
+        assert!(out.contains("7 days"), "expected '7 days' in: {}", out);
+        assert!(
+            out.contains(box_chars::WARNING),
+            "expected WARNING icon in: {}",
+            out
+        );
+    }
+
+    #[test]
+    fn test_expiry_display_thirty_days() {
+        let out = expiry_display(30, false);
+        assert!(
+            out.contains("in 30 days"),
+            "expected 'in 30 days' in: {}",
+            out
+        );
+        assert!(
+            out.contains(box_chars::WARNING),
+            "expected WARNING icon in: {}",
+            out
+        );
+    }
+
+    #[test]
+    fn test_expiry_display_healthy() {
+        let out = expiry_display(365, false);
+        assert!(
+            out.contains("365 days remaining"),
+            "expected '365 days remaining' in: {}",
+            out
+        );
+        assert!(
+            out.contains(box_chars::CHECK),
+            "expected CHECK icon in: {}",
+            out
+        );
+    }
+
+    #[test]
+    fn test_expiry_display_no_color_has_no_ansi_codes() {
+        for days in [-10, 0, 7, 30, 365] {
+            let out = expiry_display(days, false);
+            assert!(
+                !out.contains('\x1b'),
+                "no-color output must not contain ANSI escape codes: {}",
+                out
+            );
+        }
+    }
+
+    #[test]
+    fn test_expiry_display_color_contains_ansi_codes() {
+        for days in [-10, 0, 7, 30, 365] {
+            let out = expiry_display(days, true);
+            assert!(
+                out.contains('\x1b'),
+                "color output should contain ANSI escape codes: {}",
+                out
+            );
+        }
+    }
+
+    #[test]
+    fn test_expiry_display_progress_bar_length() {
+        // The progress bar is always 10 characters wide (█ or ░)
+        for days in [-10_i64, 0, 7, 30, 180, 365] {
+            let out = expiry_display(days, false);
+            let bar_chars = out.chars().filter(|&c| c == '█' || c == '░').count();
+            assert_eq!(
+                bar_chars, 10,
+                "progress bar should be 10 chars for {} days",
+                days
+            );
+        }
+    }
+}
