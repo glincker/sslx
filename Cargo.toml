@@ -21,7 +21,7 @@ rcgen = "0.13"
 
 # TLS
 rustls = "0.23"
-webpki-roots = "0.26"
+webpki-roots = "1.0"
 
 # Serialization (--json output)
 serde = { version = "1", features = ["derive"] }
