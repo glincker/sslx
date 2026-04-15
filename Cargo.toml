@@ -17,7 +17,7 @@ clap_mangen = "0.3"
 
 # Certificate parsing & generation
 x509-parser = { version = "0.18", features = ["verify"] }
-rcgen = "0.13"
+rcgen = "0.14"
 
 # TLS
 rustls = "0.23"
