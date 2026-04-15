@@ -18,6 +18,7 @@ pub struct CertInfo {
     pub key_bits: u32,
     pub sans: Vec<String>,
     pub sha256_fingerprint: String,
+    pub public_key_sha256: String,
     pub is_ca: bool,
     pub version: u32,
 }

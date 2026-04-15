@@ -66,6 +66,7 @@ pub fn parse_der_cert(der_data: &[u8]) -> Result<CertInfo> {
     let sans = extract_sans(&cert);
 
     let sha256_fingerprint = sha256_hex(der_data);
+    let public_key_sha256 = sha256_hex(&cert.public_key().subject_public_key.data);
 
     let is_ca = cert
         .basic_constraints()
@@ -84,6 +85,7 @@ pub fn parse_der_cert(der_data: &[u8]) -> Result<CertInfo> {
         key_bits,
         sans,
         sha256_fingerprint,
+        public_key_sha256,
         is_ca,
         version: cert.version().0,
     })
@@ -207,6 +209,16 @@ fn parse_pem_blocks(data: &[u8]) -> Result<Vec<Vec<u8>>> {
     }
 
     Ok(blocks)
+}
+
+/// Public base64 decoder for other modules
+pub fn base64_decode_str(input: &str) -> Result<Vec<u8>> {
+    base64_decode(input)
+}
+
+/// Public SHA-256 helper for other modules
+pub fn sha256_of(data: &[u8]) -> String {
+    sha256_hex(data)
 }
 
 /// Simple base64 decoder (avoids base64 crate dependency)

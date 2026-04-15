@@ -91,6 +91,77 @@ enum Commands {
         #[arg(short, long, default_value = ".")]
         out: String,
     },
+
+    /// Convert between certificate formats (PEM, DER, PKCS12)
+    Convert {
+        /// Input file path
+        input: String,
+
+        /// Target format: pem, der, pkcs12
+        #[arg(long)]
+        to: String,
+
+        /// Private key file (required for PKCS12 export)
+        #[arg(long)]
+        key: Option<String>,
+
+        /// Password for PKCS12
+        #[arg(long)]
+        password: Option<String>,
+
+        /// Output file path (auto-generated if omitted)
+        #[arg(short, long)]
+        out: Option<String>,
+    },
+
+    /// Check if a certificate and private key match
+    #[command(name = "match")]
+    Match {
+        /// Path to certificate file
+        cert: String,
+
+        /// Path to private key file
+        key: String,
+    },
+
+    /// Extract cert, key, and chain from a PKCS12 file
+    Extract {
+        /// Path to .p12/.pfx file
+        input: String,
+
+        /// PKCS12 password
+        #[arg(long)]
+        password: Option<String>,
+
+        /// Output directory
+        #[arg(short, long, default_value = ".")]
+        out: String,
+    },
+
+    /// Generate a Certificate Signing Request (CSR)
+    Csr {
+        /// Common Name
+        #[arg(long)]
+        cn: String,
+
+        /// Subject Alternative Names (comma-separated)
+        #[arg(long, value_delimiter = ',')]
+        san: Vec<String>,
+
+        /// Key type: ec256 (default), ec384, ed25519
+        #[arg(long, default_value = "ec256")]
+        key_type: String,
+
+        /// Output directory
+        #[arg(short, long, default_value = ".")]
+        out: String,
+    },
+
+    /// Auto-detect and decode any crypto file (cert, key, CSR, JWT)
+    Decode {
+        /// File path or inline string (e.g., JWT token)
+        input: String,
+    },
 }
 
 fn main() {
@@ -168,6 +239,36 @@ fn run(cli: Cli) -> anyhow::Result<i32> {
             key_type,
             out,
         } => commands::generate::run(&cn, &san, days, &key_type, &out, cli.json, cli.no_color),
+        Commands::Convert {
+            input,
+            to,
+            key,
+            password,
+            out,
+        } => commands::convert::run(
+            &input,
+            &to,
+            key.as_deref(),
+            password.as_deref(),
+            out.as_deref(),
+            cli.json,
+            cli.no_color,
+        ),
+        Commands::Match { cert, key } => {
+            commands::match_cmd::run(&cert, &key, cli.json, cli.no_color)
+        }
+        Commands::Extract {
+            input,
+            password,
+            out,
+        } => commands::extract::run(&input, password.as_deref(), &out, cli.json, cli.no_color),
+        Commands::Csr {
+            cn,
+            san,
+            key_type,
+            out,
+        } => commands::csr::run(&cn, &san, &key_type, &out, cli.json, cli.no_color),
+        Commands::Decode { input } => commands::decode::run(&input, cli.json, cli.no_color),
     }
 }
 
