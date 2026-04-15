@@ -1,0 +1,42 @@
+[package]
+name = "sslx"
+version = "0.1.0"
+edition = "2021"
+description = "The modern way to work with certificates and TLS"
+license = "MIT"
+repository = "https://github.com/glincker/sslx"
+homepage = "https://github.com/glincker/sslx"
+keywords = ["tls", "ssl", "certificate", "x509", "openssl"]
+categories = ["command-line-utilities", "cryptography"]
+
+[dependencies]
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Certificate parsing & generation
+x509-parser = { version = "0.16", features = ["verify"] }
+rcgen = "0.13"
+
+# TLS
+rustls = "0.23"
+webpki-roots = "0.26"
+
+# Serialization (--json output)
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Error handling
+anyhow = "1"
+
+# Time (used by rcgen, shared dep)
+time = "0.3"
+
+[dev-dependencies]
+tempfile = "3"
+serde_json = "1"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
