@@ -21,7 +21,11 @@ pub fn parse_cert_file(path: &str) -> Result<Vec<CertInfo>> {
 /// Parse certificate(s) from raw bytes (PEM or DER).
 /// Use this when data is already in memory (e.g. read from stdin).
 pub fn parse_cert_data(data: &[u8]) -> Result<Vec<CertInfo>> {
-    parse_cert_data_with_source(data, "<stdin>")
+    parse_cert_data_with_source(data, "stdin")
+}
+
+pub fn parse_cert_data_from(data: &[u8], source: &str) -> Result<Vec<CertInfo>> {
+    parse_cert_data_with_source(data, source)
 }
 
 fn parse_cert_data_with_source(data: &[u8], source: &str) -> Result<Vec<CertInfo>> {
@@ -33,7 +37,7 @@ fn parse_cert_data_with_source(data: &[u8], source: &str) -> Result<Vec<CertInfo
         bail!(
             "Unrecognized certificate format in '{}'. Expected PEM or DER.\n\
              Hint: PEM files start with '-----BEGIN CERTIFICATE-----'\n\
-             Hint: For PKCS12 (.p12/.pfx), use --pkcs12 flag",
+             Hint: For PKCS12 (.p12/.pfx), use the convert or extract command",
             source
         )
     }

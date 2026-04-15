@@ -229,6 +229,7 @@ fn test_verify_self_signed() {
 }
 
 #[test]
+#[ignore]
 fn test_connect_live_host() {
     let output = sslx()
         .args(["connect", "google.com", "--no-color"])
@@ -241,6 +242,7 @@ fn test_connect_live_host() {
 }
 
 #[test]
+#[ignore]
 fn test_grade_live_host() {
     let output = sslx()
         .args(["grade", "google.com", "--no-color"])
@@ -252,6 +254,7 @@ fn test_grade_live_host() {
 }
 
 #[test]
+#[ignore]
 fn test_expiry_multiple_hosts() {
     let output = sslx()
         .args(["expiry", "google.com", "github.com", "--no-color"])
@@ -264,6 +267,7 @@ fn test_expiry_multiple_hosts() {
 }
 
 #[test]
+#[ignore]
 fn test_connect_bad_host() {
     let output = sslx()
         .args(["connect", "nonexistent.invalid.host.example"])
@@ -273,6 +277,7 @@ fn test_connect_bad_host() {
 }
 
 #[test]
+#[ignore]
 fn test_grade_json() {
     let output = sslx()
         .args(["grade", "google.com", "--json"])
