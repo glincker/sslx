@@ -1,18 +1,7 @@
-# Security Policy
+# Security
 
-## Reporting a Vulnerability
+Found a vulnerability? Email gdsksdeveloper@gmail.com instead of opening a public issue.
 
-If you find a security vulnerability, please email gdsksdeveloper@gmail.com instead of opening a public issue.
+Tell me what you found, how to reproduce it, and how bad you think it is. I'll get back to you within 48 hours.
 
-Include:
-- Description of the vulnerability
-- Steps to reproduce
-- Impact assessment
-
-I'll respond within 48 hours.
-
-## Scope
-
-sslx handles TLS connections and certificate parsing. Security issues in these areas are taken seriously.
-
-sslx does not store credentials, private keys, or sensitive data beyond the current command execution.
+sslx parses certificates and makes TLS connections. It doesn't store keys or credentials.
