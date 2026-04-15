@@ -162,6 +162,18 @@ enum Commands {
         /// File path or inline string (e.g., JWT token)
         input: String,
     },
+
+    /// TLS security grade (A+ to F) like SSL Labs
+    Grade {
+        /// Hostname or host:port
+        host: String,
+    },
+
+    /// Check certificate expiry across multiple hosts
+    Expiry {
+        /// One or more hostnames (or host:port)
+        hosts: Vec<String>,
+    },
 }
 
 fn main() {
@@ -269,6 +281,11 @@ fn run(cli: Cli) -> anyhow::Result<i32> {
             out,
         } => commands::csr::run(&cn, &san, &key_type, &out, cli.json, cli.no_color),
         Commands::Decode { input } => commands::decode::run(&input, cli.json, cli.no_color),
+        Commands::Grade { host } => {
+            let (host, port) = parse_host_port(&host);
+            commands::grade::run(&host, port, cli.json, cli.no_color)
+        }
+        Commands::Expiry { hosts } => commands::expiry::run(&hosts, cli.json, cli.no_color),
     }
 }
 
