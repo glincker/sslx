@@ -1,4 +1,4 @@
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 fn sslx() -> Command {
     Command::new(env!("CARGO_BIN_EXE_sslx"))
@@ -225,5 +225,279 @@ fn test_verify_self_signed() {
     assert!(
         stdout.contains("valid"),
         "self-signed cert should verify against itself"
+    );
+}
+
+#[test]
+fn test_connect_live_host() {
+    let output = sslx()
+        .args(["connect", "google.com", "--no-color"])
+        .output()
+        .expect("connect failed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("TLS 1."), "should show TLS version");
+    assert!(stdout.contains("google.com"), "should show hostname");
+    assert!(output.status.success());
+}
+
+#[test]
+fn test_grade_live_host() {
+    let output = sslx()
+        .args(["grade", "google.com", "--no-color"])
+        .output()
+        .expect("grade failed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Grade:"), "should show grade");
+    assert!(output.status.success());
+}
+
+#[test]
+fn test_expiry_multiple_hosts() {
+    let output = sslx()
+        .args(["expiry", "google.com", "github.com", "--no-color"])
+        .output()
+        .expect("expiry failed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("google.com"), "should list google");
+    assert!(stdout.contains("github.com"), "should list github");
+    assert!(output.status.success());
+}
+
+#[test]
+fn test_connect_bad_host() {
+    let output = sslx()
+        .args(["connect", "nonexistent.invalid.host.example"])
+        .output()
+        .expect("connect should run");
+    assert!(!output.status.success(), "should fail for bad host");
+}
+
+#[test]
+fn test_grade_json() {
+    let output = sslx()
+        .args(["grade", "google.com", "--json"])
+        .output()
+        .expect("grade failed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("should be valid json");
+    assert!(json["grade"].is_string(), "should have grade field");
+    assert!(json["score"].is_number(), "should have score field");
+}
+
+#[test]
+fn test_decode_jwt_inline() {
+    let jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4iLCJpYXQiOjE1MTYyMzkwMjJ9.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
+    let output = sslx()
+        .args(["decode", jwt, "--no-color"])
+        .output()
+        .expect("decode failed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("JWT"), "should detect JWT");
+    assert!(stdout.contains("John"), "should show payload");
+}
+
+#[test]
+fn test_match_wrong_key() {
+    let dir1 = tempfile::tempdir().unwrap();
+    let dir2 = tempfile::tempdir().unwrap();
+    // generate two different certs
+    sslx()
+        .args([
+            "generate",
+            "--cn",
+            "a.test",
+            "--out",
+            dir1.path().to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    sslx()
+        .args([
+            "generate",
+            "--cn",
+            "b.test",
+            "--out",
+            dir2.path().to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    // try to match cert from one with key from other
+    let output = sslx()
+        .args([
+            "match",
+            dir1.path().join("cert.pem").to_str().unwrap(),
+            dir2.path().join("key.pem").to_str().unwrap(),
+            "--no-color",
+        ])
+        .output()
+        .unwrap();
+    assert!(!output.status.success(), "mismatched cert+key should fail");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("DO NOT match"),
+        "should say they don't match"
+    );
+}
+
+#[test]
+fn test_convert_pem_to_der_and_back() {
+    let dir = tempfile::tempdir().unwrap();
+    let d = dir.path().to_str().unwrap();
+    sslx()
+        .args(["generate", "--cn", "convert.test", "--out", d])
+        .output()
+        .unwrap();
+
+    let cert_pem = dir.path().join("cert.pem");
+    let cert_der = dir.path().join("cert.der");
+    let cert_back = dir.path().join("cert_back.pem");
+
+    // PEM -> DER
+    sslx()
+        .args([
+            "convert",
+            cert_pem.to_str().unwrap(),
+            "--to",
+            "der",
+            "--out",
+            cert_der.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(cert_der.exists());
+
+    // DER -> PEM
+    sslx()
+        .args([
+            "convert",
+            cert_der.to_str().unwrap(),
+            "--to",
+            "pem",
+            "--out",
+            cert_back.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(cert_back.exists());
+
+    // inspect the round-tripped cert
+    let output = sslx()
+        .args(["inspect", cert_back.to_str().unwrap(), "--no-color"])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("convert.test"));
+}
+
+#[test]
+fn test_inspect_stdin_pem() {
+    // Generate a cert to a temp dir, then pipe its PEM contents via stdin.
+    let dir = tempfile::tempdir().expect("failed to create temp dir");
+    let dir_path = dir.path().to_str().unwrap();
+
+    sslx()
+        .args(["generate", "--cn", "stdin.test", "--out", dir_path])
+        .output()
+        .expect("failed to generate cert");
+
+    let cert_path = dir.path().join("cert.pem");
+    let pem_bytes = std::fs::read(&cert_path).expect("failed to read cert.pem");
+
+    let mut child = sslx()
+        .args(["inspect", "-", "--no-color"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to spawn sslx");
+
+    use std::io::Write;
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(&pem_bytes)
+        .expect("failed to write stdin");
+
+    let output = child.wait_with_output().expect("failed to wait");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "inspect - should succeed");
+    assert!(stdout.contains("stdin.test"), "subject should appear");
+    assert!(stdout.contains("days remaining"), "expiry should appear");
+}
+
+#[test]
+fn test_inspect_stdin_json() {
+    let dir = tempfile::tempdir().expect("failed to create temp dir");
+    let dir_path = dir.path().to_str().unwrap();
+
+    sslx()
+        .args(["generate", "--cn", "stdin-json.test", "--out", dir_path])
+        .output()
+        .expect("failed to generate cert");
+
+    let pem_bytes = std::fs::read(dir.path().join("cert.pem")).expect("failed to read cert.pem");
+
+    let mut child = sslx()
+        .args(["inspect", "-", "--json"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to spawn sslx");
+
+    use std::io::Write;
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(&pem_bytes)
+        .expect("failed to write stdin");
+
+    let output = child.wait_with_output().expect("failed to wait");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "inspect - --json should succeed");
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("should be valid JSON");
+    assert_eq!(json["certificates"][0]["subject"], "CN=stdin-json.test");
+}
+
+#[test]
+fn test_decode_stdin_pem_cert() {
+    let dir = tempfile::tempdir().expect("failed to create temp dir");
+    let dir_path = dir.path().to_str().unwrap();
+
+    sslx()
+        .args(["generate", "--cn", "decode-stdin.test", "--out", dir_path])
+        .output()
+        .expect("failed to generate cert");
+
+    let pem_bytes = std::fs::read(dir.path().join("cert.pem")).expect("failed to read cert.pem");
+
+    let mut child = sslx()
+        .args(["decode", "-", "--no-color"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to spawn sslx");
+
+    use std::io::Write;
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(&pem_bytes)
+        .expect("failed to write stdin");
+
+    let output = child.wait_with_output().expect("failed to wait");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "decode - should succeed");
+    assert!(
+        stdout.contains("PEM Certificate"),
+        "should detect PEM Certificate"
+    );
+    assert!(
+        stdout.contains("decode-stdin.test"),
+        "subject should appear"
     );
 }
