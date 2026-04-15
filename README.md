@@ -1,13 +1,12 @@
 <p align="center">
   <h1 align="center">sslx</h1>
-  <p align="center">Inspect, verify, and manage TLS certificates from the terminal.</p>
+  <p align="center">openssl, but you don't have to google the flags</p>
 </p>
 
 <p align="center">
   <a href="https://crates.io/crates/sslx"><img src="https://img.shields.io/crates/v/sslx.svg" alt="crates.io"></a>
   <a href="https://github.com/glincker/sslx/actions"><img src="https://github.com/glincker/sslx/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/glincker/sslx/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
-  <a href="https://crates.io/crates/sslx"><img src="https://img.shields.io/crates/d/sslx.svg" alt="Downloads"></a>
 </p>
 
 ---
@@ -34,32 +33,27 @@ $ sslx grade github.com
 cargo install sslx
 ```
 
-Or download a prebuilt binary from [releases](https://github.com/glincker/sslx/releases).
+Prebuilt binaries on the [releases page](https://github.com/glincker/sslx/releases). Homebrew: `brew install glincker/tap/sslx`
 
-Homebrew:
-```bash
-brew install glincker/tap/sslx
-```
+## Examples
 
-## What it does
-
-sslx replaces the OpenSSL commands you keep looking up.
+The openssl command you can never remember vs sslx:
 
 ```bash
-# instead of: openssl x509 -in cert.pem -text -noout
+# openssl x509 -in cert.pem -text -noout
 sslx inspect cert.pem
 
-# instead of: openssl s_client -connect host:443 2>/dev/null | openssl x509 -text
+# openssl s_client -connect host:443 2>/dev/null | openssl x509 -text
 sslx connect example.com
 
-# instead of: openssl verify -CAfile ca.pem cert.pem
+# openssl verify -CAfile ca.pem cert.pem
 sslx verify cert.pem --ca ca.pem
 
-# instead of: openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 ...
+# openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 ...
 sslx generate --cn localhost
 ```
 
-### Check expiry across multiple hosts
+Check cert expiry on a bunch of hosts at once:
 
 ```
 $ sslx expiry google.com github.com cloudflare.com
@@ -71,9 +65,9 @@ $ sslx expiry google.com github.com cloudflare.com
   ✓ cloudflare.com:443             2026-06-10         56  OK
 ```
 
-Exit code is 1 if anything is expiring within 7 days, so you can use it in CI or cron.
+Returns exit code 1 if anything expires within 7 days, so it works in cron/CI.
 
-### Inspect certificates
+Look at a cert file:
 
 ```
 $ sslx inspect cert.pem
@@ -90,7 +84,7 @@ $ sslx inspect cert.pem
 ╰──────────────────────────────────────────────────────────╯
 ```
 
-### Decode JWTs
+Throw a JWT at it and it figures it out:
 
 ```
 $ sslx decode eyJhbGciOiJIUzI1...
@@ -101,39 +95,37 @@ $ sslx decode eyJhbGciOiJIUzI1...
     Payload:  {"sub":"1234567890","name":"John","iat":1516239022}
 ```
 
-## All commands
+## Commands
 
-| Command | What it does |
-|---------|-------------|
-| `inspect <file>` | Parse and display a certificate |
-| `connect <host>` | TLS handshake details and cert chain |
-| `verify <file>` | Verify a certificate chain |
-| `generate` | Generate a self-signed cert for local dev |
-| `grade <host>` | TLS security grade (A+ to F) |
-| `expiry <hosts...>` | Check expiry across multiple hosts |
-| `convert <file>` | Convert between PEM, DER, PKCS12 |
-| `match <cert> <key>` | Check that a cert and key are a pair |
-| `extract <file>` | Extract certs from a PKCS12 bundle |
-| `csr` | Generate a certificate signing request |
-| `decode <file\|token>` | Auto-detect PEM, DER, JWT, etc. |
+| Command | |
+|---------|---|
+| `inspect <file>` | show cert details |
+| `connect <host>` | TLS handshake + cert chain |
+| `verify <file>` | check a cert chain |
+| `generate` | self-signed cert |
+| `grade <host>` | A+ to F TLS grade |
+| `expiry <hosts...>` | cert expiry check |
+| `convert <file>` | PEM/DER/PKCS12 conversion |
+| `match <cert> <key>` | cert+key pair check |
+| `extract <file>` | pull certs out of a .p12 |
+| `csr` | certificate signing request |
+| `decode <file\|token>` | figure out what a file is |
 
-All commands support `--json` for scripting:
+Everything supports `--json`:
 
 ```bash
 sslx connect example.com --json | jq '.chain.certificates[0].days_remaining'
 ```
 
-## Benchmarks
+## Speed
 
-Median of 10 runs on macOS M2:
+| | sslx | openssl |
+|---|------|---------|
+| inspect cert | 2.1ms | 9.4ms |
+| generate cert | 1.7ms | 4.5ms |
+| cold start | 1.3ms | |
 
-| Operation | sslx | openssl |
-|-----------|------|---------|
-| Inspect cert | 2.1ms | 9.4ms |
-| Generate cert | 1.7ms | 4.5ms |
-| Startup | 1.3ms | - |
-
-Built with [rustls](https://github.com/rustls/rustls). No system OpenSSL dependency.
+Uses [rustls](https://github.com/rustls/rustls), not system OpenSSL.
 
 ## Shell completions
 
