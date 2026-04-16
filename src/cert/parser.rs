@@ -2,7 +2,7 @@ use anyhow::{bail, Context, Result};
 use x509_parser::prelude::*;
 use x509_parser::public_key::PublicKey;
 
-use crate::cert::{CertInfo, CertTime, KeyType};
+use crate::cert::{CertInfo, CertTime, KeyType, VerboseCert};
 
 /// Format bytes as colon-separated hex
 fn format_hex(bytes: &[u8]) -> String {
@@ -64,9 +64,6 @@ pub fn parse_der_cert(der_data: &[u8]) -> Result<CertInfo> {
     let (_, cert) = X509Certificate::from_der(der_data)
         .map_err(|e| anyhow::anyhow!("bad certificate: {}", e))?;
 
-    // TODO Test prints
-
-
     let subject = cert.subject().to_string();
     let issuer = cert.issuer().to_string();
     let serial_hex = format_hex(cert.raw_serial());
@@ -101,6 +98,56 @@ pub fn parse_der_cert(der_data: &[u8]) -> Result<CertInfo> {
         public_key_sha256,
         is_ca,
         version: cert.version().0,
+    })
+}
+
+fn verbose_parse_der_cert(der_data: &[u8]) -> Result<VerboseCert> {
+    let (_, cert) = X509Certificate::from_der(der_data)
+        .map_err(|e| anyhow::anyhow!("bad certificate: {}", e))?;
+
+    // Key usage
+    let key_usage = cert.key_usage()?;
+    let key_usage = if key_usage.is_some() {
+        key_usage.unwrap().value.to_string()
+    } else {String::from("None")};
+    let extended_key_usage = cert.extended_key_usage()?.unwrap().value; //fixme
+
+    // Policy constraints
+    let policy_constraints = cert.policy_constraints()?;
+    let (require_explicit_policy, inhibit_policy_mapping) = if policy_constraints.is_some() {
+        let p = policy_constraints.unwrap().value;
+        (
+            p.require_explicit_policy.unwrap().to_string(),
+            p.inhibit_policy_mapping.unwrap().to_string()
+        )
+    } else {
+        (String::from("None"), String::from("None"))
+    };
+
+    let inhibit_anypolicy = cert.inhibit_anypolicy()?.unwrap().value;
+
+    // CRLDistributionPoints
+
+
+    /*
+    InhibitAnyPolicy(InhibitAnyPolicy),
+    AuthorityInfoAccess(AuthorityInfoAccess<'a>),
+    SubjectInfoAccess(SubjectInfoAccess<'a>),
+    NSCertType(NSCertType),
+    NsCertComment(&'a str),
+    IssuingDistributionPoint(IssuingDistributionPoint<'a>),
+    CRLNumber(BigUint),
+    ReasonCode(ReasonCode),
+    InvalidityDate(ASN1Time),
+    SCT(Vec<SignedCertificateTimestamp<'a>>),
+     */
+
+    Ok(VerboseCert{
+        base_cert: parse_der_cert(der_data)?,
+        key_usage,
+        extended_key_usage,
+        require_explicit_policy,
+        inhibit_policy_mapping
     })
 }
 

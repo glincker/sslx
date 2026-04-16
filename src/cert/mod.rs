@@ -46,6 +46,30 @@ impl CertInfo {
     }
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct VerboseCert {
+    pub base_cert: CertInfo,
+    pub key_usage: String,
+    // extended key usage
+    require_explicit_policy: String,
+    inhibit_policy_mapping: String
+    
+}
+
+impl VerboseCert {
+    pub fn days_remaining(&self) -> i64 {
+        self.base_cert.days_remaining()
+    }
+
+    pub fn is_expired(&self) -> bool {
+        self.base_cert.is_expired()
+    }
+
+    pub fn key_description(&self) -> String {
+        self.base_cert.key_description()
+    }
+}
+
 /// Key algorithm type
 #[derive(Debug, Clone, Serialize)]
 pub enum KeyType {
