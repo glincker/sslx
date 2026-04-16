@@ -27,6 +27,10 @@ struct Cli {
     #[arg(long, global = true)]
     json: bool,
 
+    /// Verbose output
+    #[arg(long, global = true)]
+    verbose: bool,
+
     /// Disable colored output
     #[arg(long, global = true)]
     no_color: bool,
@@ -235,7 +239,7 @@ fn main() {
 
 fn run(cli: Cli) -> anyhow::Result<i32> {
     match cli.command {
-        Commands::Inspect { file } => commands::inspect::run(&file, cli.json, cli.no_color),
+        Commands::Inspect { file } => commands::inspect::run(&file, cli.json, cli.verbose, cli.no_color),
         Commands::Connect {
             host,
             sni,
@@ -294,7 +298,7 @@ fn run(cli: Cli) -> anyhow::Result<i32> {
             key_type,
             out,
         } => commands::csr::run(&cn, &san, &key_type, &out, cli.json, cli.no_color),
-        Commands::Decode { input } => commands::decode::run(&input, cli.json, cli.no_color),
+        Commands::Decode { input } => commands::decode::run(&input, cli.json, cli.verbose, cli.no_color),
         Commands::Grade { host } => {
             let (host, port) = parse_host_port(&host);
             commands::grade::run(&host, port, cli.json, cli.no_color)

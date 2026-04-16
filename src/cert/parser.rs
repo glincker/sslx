@@ -64,6 +64,9 @@ pub fn parse_der_cert(der_data: &[u8]) -> Result<CertInfo> {
     let (_, cert) = X509Certificate::from_der(der_data)
         .map_err(|e| anyhow::anyhow!("bad certificate: {}", e))?;
 
+    // TODO Test prints
+
+
     let subject = cert.subject().to_string();
     let issuer = cert.issuer().to_string();
     let serial_hex = format_hex(cert.raw_serial());
