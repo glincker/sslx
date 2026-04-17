@@ -298,7 +298,7 @@ fn run(cli: Cli) -> anyhow::Result<i32> {
             key_type,
             out,
         } => commands::csr::run(&cn, &san, &key_type, &out, cli.json, cli.no_color),
-        Commands::Decode { input } => commands::decode::run(&input, cli.json, cli.verbose, cli.no_color),
+        Commands::Decode { input } => commands::decode::run(&input, cli.json, cli.no_color),
         Commands::Grade { host } => {
             let (host, port) = parse_host_port(&host);
             commands::grade::run(&host, port, cli.json, cli.no_color)

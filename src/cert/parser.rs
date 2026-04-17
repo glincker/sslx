@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+use std::io::Read;
 use anyhow::{bail, Context, Result};
 use x509_parser::prelude::*;
 use x509_parser::public_key::PublicKey;
@@ -101,53 +103,189 @@ pub fn parse_der_cert(der_data: &[u8]) -> Result<CertInfo> {
     })
 }
 
+// Verbose parsing
+pub fn verbose_parse_cert_file(path: &str) -> Result<Vec<VerboseCert>> {
+    let data = std::fs::read(path).with_context(|| format!("can't read {}", path))?;
+    verbose_parse_cert_data_with_source(&data, path)
+}
+
+/// Parse certificate(s) from raw bytes (PEM or DER).
+/// Use this when data is already in memory (e.g. read from stdin).
+pub fn verbose_parse_cert_data(data: &[u8]) -> Result<Vec<VerboseCert>> {
+    verbose_parse_cert_data_with_source(data, "stdin")
+}
+
+pub fn verbose_parse_cert_data_from(data: &[u8], source: &str) -> Result<Vec<VerboseCert>> {
+    verbose_parse_cert_data_with_source(data, source)
+}
+
+fn verbose_parse_cert_data_with_source(data: &[u8], source: &str) -> Result<Vec<VerboseCert>> {
+    if is_pem(data) {
+        verbose_parse_pem_certs(data)
+    } else if is_der(data) {
+        verbose_parse_der_cert(data).map(|c| vec![c])
+    } else {
+        bail!(
+            "Unrecognized certificate format in '{}'. Expected PEM or DER.\n\
+             Hint: PEM files start with '-----BEGIN CERTIFICATE-----'\n\
+             Hint: For PKCS12 (.p12/.pfx), use the convert or extract command",
+            source
+        )
+    }
+}
+
+pub fn verbose_parse_pem_certs(data: &[u8]) -> Result<Vec<VerboseCert>> {
+    let pem_blocks = parse_pem_blocks(data)?;
+
+    if pem_blocks.is_empty() {
+        bail!("No certificates found in PEM data");
+    }
+
+    let mut certs = Vec::new();
+    for (i, block) in pem_blocks.iter().enumerate() {
+        let cert = verbose_parse_der_cert(block)
+            .with_context(|| format!("certificate {} in bundle is invalid", i + 1))?;
+        certs.push(cert);
+    }
+
+    Ok(certs)
+}
+
 fn verbose_parse_der_cert(der_data: &[u8]) -> Result<VerboseCert> {
     let (_, cert) = X509Certificate::from_der(der_data)
         .map_err(|e| anyhow::anyhow!("bad certificate: {}", e))?;
 
-    // Key usage
-    let key_usage = cert.key_usage()?;
-    let key_usage = if key_usage.is_some() {
-        key_usage.unwrap().value.to_string()
-    } else {String::from("None")};
-    let extended_key_usage = cert.extended_key_usage()?.unwrap().value; //fixme
+    // Could go to a HashMap<String, [(String,String)]>
+    let mut extensions: HashMap<String, String> = HashMap::new();
 
-    // Policy constraints
-    let policy_constraints = cert.policy_constraints()?;
-    let (require_explicit_policy, inhibit_policy_mapping) = if policy_constraints.is_some() {
-        let p = policy_constraints.unwrap().value;
-        (
-            p.require_explicit_policy.unwrap().to_string(),
-            p.inhibit_policy_mapping.unwrap().to_string()
-        )
-    } else {
-        (String::from("None"), String::from("None"))
-    };
+    for e in cert.iter_extensions() {
+        // List of extensions: https://docs.rs/x509-parser/0.18.1/x509_parser/extensions/enum.ParsedExtension.html
+        extensions.extend(match e.parsed_extension() {
+            ParsedExtension::AuthorityKeyIdentifier(authority_key_id) => {
+                [
+                    (
+                        "Authority key identifier".to_string(),
+                         match &authority_key_id.key_identifier {
+                            None => "None".to_string(),
+                            Some(id) => format_hex(id.0)
+                        }
+                    ),
+                    (
+                        "Authority cert issuer".to_string(),
+                         match &authority_key_id.authority_cert_issuer {
+                            None => "None".to_string(),
+                            Some(issuer) =>
+                                String::from_iter(
+                                    issuer.iter().map(|gn| gn.to_string())
+                                ) //check this
+                        }
+                    ),
+                    (
+                        "Authority cert serial".to_string(),
+                         match authority_key_id.authority_cert_serial {
+                             None => "None".to_string(),
+                             Some(serial) => format_hex(serial)
+                         }
+                    )
+                ].to_vec()
+            },
+            ParsedExtension::SubjectKeyIdentifier(subject_key_id) => {
+                [].to_vec()
+            },
+            ParsedExtension::KeyUsage(key_usage) => {
+                [
+                    ("Digital signature".to_string(), key_usage.digital_signature().to_string()),
+                    ("Non repudiation".to_string(), key_usage.non_repudiation().to_string()),
+                    ("Key encipherment".to_string(), key_usage.key_encipherment().to_string()),
+                    ("Data encipherment".to_string(), key_usage.data_encipherment().to_string()),
+                    ("Key agreement".to_string(), key_usage.key_agreement().to_string()),
+                    ("Key cert sign".to_string(), key_usage.key_cert_sign().to_string()),
+                    ("CRL sign".to_string(), key_usage.key_encipherment().to_string()),
+                    ("Encipher only".to_string(), key_usage.key_encipherment().to_string()),
+                    ("Decipher only".to_string(), key_usage.key_encipherment().to_string()),
+                ].to_vec()
+            },
+            ParsedExtension::CertificatePolicies(cert_policies) => {
+                Vec::from_iter(cert_policies.iter().map(
+                    |policy_information| {
+                        (
+                            format!("Policy {}", policy_information.policy_id),
+                             match &policy_information.policy_qualifiers {
+                                 None => "None".to_string(),
+                                 Some(qualifiers) => "todo".to_string()
+                             }
+                        )
+                }))
+            },
+            ParsedExtension::PolicyMappings(policy_mappings) => {
+                [].to_vec()
+            },
+            ParsedExtension::SubjectAlternativeName(subject_alt_name) => {
+                [].to_vec()
+            },
+            ParsedExtension::IssuerAlternativeName(issuer_alt_name) => {
+                [].to_vec()
+            },
+            ParsedExtension::BasicConstraints(constraints_basic) => {
+                [].to_vec()
+            },
+            ParsedExtension::NameConstraints(constraints_name) => {
+                [].to_vec()
+            },
+            ParsedExtension::PolicyConstraints(constraints_policy) => {
+                [].to_vec()
+            },
+            ParsedExtension::ExtendedKeyUsage(extended_key_usage) => {
+                [].to_vec()
+            },
+            ParsedExtension::CRLDistributionPoints(crl_dist_points) => {
+                [].to_vec()
+            },
+            ParsedExtension::InhibitAnyPolicy(policy_inhibit_any) => {
+                [].to_vec()
+            },
+            ParsedExtension::AuthorityInfoAccess(authority_info_access) => {
+                [].to_vec()
+            },
+            ParsedExtension::NSCertType(ns_cert_type) => {
+                [].to_vec()
+            },
+            ParsedExtension::NsCertComment(ns_cert_comment) => {
+                [].to_vec()
+            },
+            ParsedExtension::IssuingDistributionPoint(issuing_dist_point) => {
+                [].to_vec()
+            },
+            ParsedExtension::CRLNumber(crl_num) => {
+                [].to_vec()
+            },
+            ParsedExtension::ReasonCode(reason_code) => {
+                [].to_vec()
+            },
+            ParsedExtension::InvalidityDate(invalidity_date) => {
+                [].to_vec()
+            },
+            ParsedExtension::SCT(sct) => {
+                [].to_vec()
+            },
 
-    let inhibit_anypolicy = cert.inhibit_anypolicy()?.unwrap().value;
+            ParsedExtension::UnsupportedExtension {oid} => {
+                [("Unsupported extension".to_string(), oid.to_string())].to_vec()
+            },
+            ParsedExtension::ParseError {error} => {
+                [].to_vec()
+            },
+            ParsedExtension::Unparsed => {
+                [].to_vec()
+            },
+            _ => Vec::new()
 
-    // CRLDistributionPoints
-
-
-    /*
-    InhibitAnyPolicy(InhibitAnyPolicy),
-    AuthorityInfoAccess(AuthorityInfoAccess<'a>),
-    SubjectInfoAccess(SubjectInfoAccess<'a>),
-    NSCertType(NSCertType),
-    NsCertComment(&'a str),
-    IssuingDistributionPoint(IssuingDistributionPoint<'a>),
-    CRLNumber(BigUint),
-    ReasonCode(ReasonCode),
-    InvalidityDate(ASN1Time),
-    SCT(Vec<SignedCertificateTimestamp<'a>>),
-     */
+        });
+    }
 
     Ok(VerboseCert{
         base_cert: parse_der_cert(der_data)?,
-        key_usage,
-        extended_key_usage,
-        require_explicit_policy,
-        inhibit_policy_mapping
+        extensions: extensions
     })
 }
 

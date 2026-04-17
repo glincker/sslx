@@ -2,6 +2,7 @@ pub mod chain;
 pub mod parser;
 pub mod tls;
 
+use std::collections::HashMap;
 use serde::Serialize;
 use std::fmt;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -49,11 +50,7 @@ impl CertInfo {
 #[derive(Debug, Clone, Serialize)]
 pub struct VerboseCert {
     pub base_cert: CertInfo,
-    pub key_usage: String,
-    // extended key usage
-    require_explicit_policy: String,
-    inhibit_policy_mapping: String
-    
+    pub extensions: HashMap<String, String>
 }
 
 impl VerboseCert {
