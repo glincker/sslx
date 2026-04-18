@@ -189,8 +189,10 @@ fn verbose_parse_der_cert(der_data: &[u8]) -> Result<VerboseCert> {
                     )
                 ].to_vec()
             },
-            ParsedExtension::SubjectKeyIdentifier(subject_key_id) => {
-                [].to_vec()
+            ParsedExtension::SubjectKeyIdentifier(key_id) => {
+                [
+                    ("Subject key id".to_string(), format_hex(key_id.0))
+                ].to_vec()
             },
             ParsedExtension::KeyUsage(key_usage) => {
                 [
@@ -212,25 +214,60 @@ fn verbose_parse_der_cert(der_data: &[u8]) -> Result<VerboseCert> {
                             format!("Policy {}", policy_information.policy_id),
                              match &policy_information.policy_qualifiers {
                                  None => "None".to_string(),
-                                 Some(qualifiers) => "todo".to_string()
+                                 Some(qualifiers) => "todo".to_string() //todo
                              }
                         )
                 }))
             },
             ParsedExtension::PolicyMappings(policy_mappings) => {
-                [].to_vec()
+                [
+                    ("Policy mappings".to_string(), policy_mappings.mappings.iter().map(
+                        |mapping| {
+                        format!(
+                            "(Issuer: {}, Subject: {})",
+                            &mapping.issuer_domain_policy.to_id_string(),
+                            &mapping.subject_domain_policy.to_id_string()
+                        ).to_string() }
+                    ).collect::<Vec<String>>().join(", "))
+                ].to_vec()
             },
             ParsedExtension::SubjectAlternativeName(subject_alt_name) => {
-                [].to_vec()
+                [
+                    ("Subject alternative name(s)".to_string(), format!("{:?}", subject_alt_name.general_names))
+                ].to_vec()
             },
             ParsedExtension::IssuerAlternativeName(issuer_alt_name) => {
-                [].to_vec()
+                [
+                    ("Issuer alternative name(s)".to_string(), format!("{:?}", issuer_alt_name.general_names))
+                ].to_vec()
             },
             ParsedExtension::BasicConstraints(constraints_basic) => {
+                // Handled in CertInfo
                 [].to_vec()
             },
             ParsedExtension::NameConstraints(constraints_name) => {
-                [].to_vec()
+                let format_subtrees =
+                    |subtrees_options:&Option<Vec<GeneralSubtree>>| {
+                    match subtrees_options {
+                        Some(subtrees) => subtrees.iter().map(
+                            |tree| {
+                                tree.base.to_string()
+                            }
+                        ).collect::<Vec<String>>().join(", "),
+                        None => "None".to_string()
+                    }
+                };
+
+                [
+                    (
+                        "Permitted subtrees".to_string(),
+                        format_subtrees(&constraints_name.permitted_subtrees)
+                    ),
+                    (
+                        "Permitted subtrees".to_string(),
+                        format_subtrees(&constraints_name.excluded_subtrees)
+                    )
+                ].to_vec()
             },
             ParsedExtension::PolicyConstraints(constraints_policy) => {
                 [].to_vec()
