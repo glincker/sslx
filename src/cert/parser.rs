@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use std::io::Read;
 use anyhow::{bail, Context, Result};
+use rustls::internal::msgs::codec::Codec;
 use x509_parser::prelude::*;
 use x509_parser::public_key::PublicKey;
 
@@ -13,6 +13,12 @@ fn format_hex(bytes: &[u8]) -> String {
         .map(|b| format!("{:02X}", b))
         .collect::<Vec<_>>()
         .join(":")
+}
+
+fn format_hex_from_u32(bytes: u32) -> String {
+    let mut buf: Vec<u8> = Vec::new();
+    bytes.encode(&mut buf);
+    format_hex(&*buf)
 }
 
 pub fn parse_cert_file(path: &str) -> Result<Vec<CertInfo>> {
@@ -156,98 +162,133 @@ fn verbose_parse_der_cert(der_data: &[u8]) -> Result<VerboseCert> {
         .map_err(|e| anyhow::anyhow!("bad certificate: {}", e))?;
 
     // Could go to a HashMap<String, [(String,String)]>
-    let mut extensions: HashMap<String, String> = HashMap::new();
+    let mut extensions: HashMap<String, Vec<(String, String)>> = HashMap::new();
 
     for e in cert.iter_extensions() {
-        // List of extensions: https://docs.rs/x509-parser/0.18.1/x509_parser/extensions/enum.ParsedExtension.html
-        extensions.extend(match e.parsed_extension() {
-            ParsedExtension::AuthorityKeyIdentifier(authority_key_id) => {
-                [
+        match parse_der_extension(e) {
+            Some(d) =>{extensions.insert(d.0, d.1);},
+            None => {}
+        }
+    }
+
+    Ok(VerboseCert {
+        base_cert: parse_der_cert(der_data)?,
+        extensions
+    })
+}
+
+fn parse_der_extension(e: &X509Extension) -> Option<(String, Vec<(String, String)>)> {
+    // List of extensions: https://docs.rs/x509-parser/0.18.1/x509_parser/extensions/enum.ParsedExtension.html
+    let interpret_reason_flags = |flags: &ReasonFlags| -> String {
+        format!(
+            "Key compromised: {}, CA compromised: {}, Affiliation changed: {}, Superseded: {}, Cessation of operation: {}, Certificate hold: {}, Privilege withdrawn: {}, AA compromised: {}",
+            flags.key_compromise(),
+            flags.ca_compromise(),
+            flags.affilation_changed(),
+            flags.superseded(),
+            flags.cessation_of_operation(),
+            flags.certificate_hold(),
+            flags.privelege_withdrawn(),
+            flags.aa_compromise()
+        )
+    };
+
+    match e.parsed_extension() {
+        ParsedExtension::AuthorityKeyIdentifier(authority_key_id) => {
+            Some(("Authority key identifier".to_string(), [
+                (
+                    "Key identifier".to_string(),
+                    match &authority_key_id.key_identifier {
+                        None => "None".to_string(),
+                        Some(id) => format_hex(id.0)
+                    }
+                ),
+                (
+                    "Authority cert issuer".to_string(),
+                    match &authority_key_id.authority_cert_issuer {
+                        None => "None".to_string(),
+                        Some(issuer) =>
+                            String::from_iter(
+                                issuer.iter().map(|gn| gn.to_string())
+                            ) //check this
+                    }
+                ),
+                (
+                    "Authority cert serial".to_string(),
+                    match authority_key_id.authority_cert_serial {
+                        None => "None".to_string(),
+                        Some(serial) => format_hex(serial)
+                    }
+                )
+            ].to_vec()))
+        },
+        ParsedExtension::SubjectKeyIdentifier(key_id) => {
+            Some(("Subject key identifier".to_string(), [
+                ("Subject key id".to_string(), format_hex(key_id.0))
+            ].to_vec()))
+        },
+        ParsedExtension::KeyUsage(key_usage) => {
+            Some(("Key usage".to_string(), [
+                ("Digital signature".to_string(), key_usage.digital_signature().to_string()),
+                ("Non repudiation".to_string(), key_usage.non_repudiation().to_string()),
+                ("Key encipherment".to_string(), key_usage.key_encipherment().to_string()),
+                ("Data encipherment".to_string(), key_usage.data_encipherment().to_string()),
+                ("Key agreement".to_string(), key_usage.key_agreement().to_string()),
+                ("Key cert sign".to_string(), key_usage.key_cert_sign().to_string()),
+                ("CRL sign".to_string(), key_usage.key_encipherment().to_string()),
+                ("Encipher only".to_string(), key_usage.key_encipherment().to_string()),
+                ("Decipher only".to_string(), key_usage.key_encipherment().to_string()),
+            ].to_vec()))
+        },
+        ParsedExtension::CertificatePolicies(cert_policies) => {
+            Some(("Certificate policies".to_string(), Vec::from_iter(cert_policies.iter().map(
+                |policy_information| {
                     (
-                        "Authority key identifier".to_string(),
-                         match &authority_key_id.key_identifier {
-                            None => "None".to_string(),
-                            Some(id) => format_hex(id.0)
+                        format!("Policy {}", policy_information.policy_id.to_id_string()),
+
+                        match &policy_information.policy_qualifiers {
+                            Some(qualifiers) =>
+                                qualifiers.iter().map(|pqi| {
+                                    format!(
+                                        "{}: {}",
+                                        pqi.policy_qualifier_id.to_id_string(),
+                                        format_hex(&pqi.qualifier)
+                                    )
+                                }).collect::<Vec<_>>().join(", "),
+                            None => "None".to_string()
                         }
-                    ),
-                    (
-                        "Authority cert issuer".to_string(),
-                         match &authority_key_id.authority_cert_issuer {
-                            None => "None".to_string(),
-                            Some(issuer) =>
-                                String::from_iter(
-                                    issuer.iter().map(|gn| gn.to_string())
-                                ) //check this
-                        }
-                    ),
-                    (
-                        "Authority cert serial".to_string(),
-                         match authority_key_id.authority_cert_serial {
-                             None => "None".to_string(),
-                             Some(serial) => format_hex(serial)
-                         }
                     )
-                ].to_vec()
-            },
-            ParsedExtension::SubjectKeyIdentifier(key_id) => {
-                [
-                    ("Subject key id".to_string(), format_hex(key_id.0))
-                ].to_vec()
-            },
-            ParsedExtension::KeyUsage(key_usage) => {
-                [
-                    ("Digital signature".to_string(), key_usage.digital_signature().to_string()),
-                    ("Non repudiation".to_string(), key_usage.non_repudiation().to_string()),
-                    ("Key encipherment".to_string(), key_usage.key_encipherment().to_string()),
-                    ("Data encipherment".to_string(), key_usage.data_encipherment().to_string()),
-                    ("Key agreement".to_string(), key_usage.key_agreement().to_string()),
-                    ("Key cert sign".to_string(), key_usage.key_cert_sign().to_string()),
-                    ("CRL sign".to_string(), key_usage.key_encipherment().to_string()),
-                    ("Encipher only".to_string(), key_usage.key_encipherment().to_string()),
-                    ("Decipher only".to_string(), key_usage.key_encipherment().to_string()),
-                ].to_vec()
-            },
-            ParsedExtension::CertificatePolicies(cert_policies) => {
-                Vec::from_iter(cert_policies.iter().map(
-                    |policy_information| {
-                        (
-                            format!("Policy {}", policy_information.policy_id),
-                             match &policy_information.policy_qualifiers {
-                                 None => "None".to_string(),
-                                 Some(qualifiers) => "todo".to_string() //todo
-                             }
-                        )
-                }))
-            },
-            ParsedExtension::PolicyMappings(policy_mappings) => {
-                [
-                    ("Policy mappings".to_string(), policy_mappings.mappings.iter().map(
-                        |mapping| {
-                        format!(
-                            "(Issuer: {}, Subject: {})",
-                            &mapping.issuer_domain_policy.to_id_string(),
-                            &mapping.subject_domain_policy.to_id_string()
-                        ).to_string() }
-                    ).collect::<Vec<String>>().join(", "))
-                ].to_vec()
-            },
-            ParsedExtension::SubjectAlternativeName(subject_alt_name) => {
-                [
-                    ("Subject alternative name(s)".to_string(), format!("{:?}", subject_alt_name.general_names))
-                ].to_vec()
-            },
-            ParsedExtension::IssuerAlternativeName(issuer_alt_name) => {
-                [
-                    ("Issuer alternative name(s)".to_string(), format!("{:?}", issuer_alt_name.general_names))
-                ].to_vec()
-            },
-            ParsedExtension::BasicConstraints(constraints_basic) => {
-                // Handled in CertInfo
-                [].to_vec()
-            },
-            ParsedExtension::NameConstraints(constraints_name) => {
-                let format_subtrees =
-                    |subtrees_options:&Option<Vec<GeneralSubtree>>| {
+                }))))
+        },
+        ParsedExtension::PolicyMappings(policy_mappings) => {
+            Some(("Policy mappings".to_string(),
+             policy_mappings.mappings.iter().map(
+                 |mapping| {
+                     (
+                         mapping.issuer_domain_policy.to_id_string(),
+                         mapping.subject_domain_policy.to_id_string()
+                     )
+                 }
+             ).collect::<Vec<(String, String)>>()
+            ))
+        },
+        ParsedExtension::SubjectAlternativeName(subject_alt_name) => {
+            Some(("Subject alternative name".to_string(), [
+                ("Name(s)".to_string(), format!("{:?}", subject_alt_name.general_names))
+            ].to_vec()))
+        },
+        ParsedExtension::IssuerAlternativeName(issuer_alt_name) => {
+            Some(("Issuer alternative name".to_string(), [
+                ("Name(s)".to_string(), format!("{:?}", issuer_alt_name.general_names))
+            ].to_vec()))
+        },
+        ParsedExtension::BasicConstraints(_) => {
+            // Handled in CertInfo
+            None
+        },
+        ParsedExtension::NameConstraints(constraints_name) => {
+            let format_subtrees =
+                |subtrees_options: &Option<Vec<GeneralSubtree>>| {
                     match subtrees_options {
                         Some(subtrees) => subtrees.iter().map(
                             |tree| {
@@ -258,72 +299,203 @@ fn verbose_parse_der_cert(der_data: &[u8]) -> Result<VerboseCert> {
                     }
                 };
 
-                [
-                    (
-                        "Permitted subtrees".to_string(),
-                        format_subtrees(&constraints_name.permitted_subtrees)
-                    ),
-                    (
-                        "Permitted subtrees".to_string(),
-                        format_subtrees(&constraints_name.excluded_subtrees)
-                    )
-                ].to_vec()
-            },
-            ParsedExtension::PolicyConstraints(constraints_policy) => {
-                [].to_vec()
-            },
-            ParsedExtension::ExtendedKeyUsage(extended_key_usage) => {
-                [].to_vec()
-            },
-            ParsedExtension::CRLDistributionPoints(crl_dist_points) => {
-                [].to_vec()
-            },
-            ParsedExtension::InhibitAnyPolicy(policy_inhibit_any) => {
-                [].to_vec()
-            },
-            ParsedExtension::AuthorityInfoAccess(authority_info_access) => {
-                [].to_vec()
-            },
-            ParsedExtension::NSCertType(ns_cert_type) => {
-                [].to_vec()
-            },
-            ParsedExtension::NsCertComment(ns_cert_comment) => {
-                [].to_vec()
-            },
-            ParsedExtension::IssuingDistributionPoint(issuing_dist_point) => {
-                [].to_vec()
-            },
-            ParsedExtension::CRLNumber(crl_num) => {
-                [].to_vec()
-            },
-            ParsedExtension::ReasonCode(reason_code) => {
-                [].to_vec()
-            },
-            ParsedExtension::InvalidityDate(invalidity_date) => {
-                [].to_vec()
-            },
-            ParsedExtension::SCT(sct) => {
-                [].to_vec()
-            },
+            Some(("Name constraints".to_string(), [
+                (
+                    "Permitted subtrees".to_string(),
+                    format_subtrees(&constraints_name.permitted_subtrees)
+                ),
+                (
+                    "Permitted subtrees".to_string(),
+                    format_subtrees(&constraints_name.excluded_subtrees)
+                )
+            ].to_vec()))
+        },
+        ParsedExtension::PolicyConstraints(constraints_policy) => {
+            let format_constraint = |constraint: &Option<u32>| {
+                match constraint {
+                    Some(u) => {
+                        format_hex_from_u32(*u)
+                    },
+                    None => "None".to_string()
+                }
+            };
 
-            ParsedExtension::UnsupportedExtension {oid} => {
-                [("Unsupported extension".to_string(), oid.to_string())].to_vec()
-            },
-            ParsedExtension::ParseError {error} => {
-                [].to_vec()
-            },
-            ParsedExtension::Unparsed => {
-                [].to_vec()
-            },
-            _ => Vec::new()
+            Some(("Policy constraints".to_string(), [
+                (
+                    "Require explicit policy".to_string(),
+                    format_constraint(&constraints_policy.inhibit_policy_mapping)
+                ),
+                (
+                    "Inhibit policy mapping".to_string(),
+                    format_constraint(&constraints_policy.require_explicit_policy)
+                )
+            ].to_vec()))
+        },
+        ParsedExtension::ExtendedKeyUsage(extended_key_usage) => {
+            Some(("Extended key usage".to_string(), [
+                ("Any".to_string(), extended_key_usage.any.to_string()),
+                ("Server authentication".to_string(), extended_key_usage.server_auth.to_string()),
+                ("Client authentication".to_string(), extended_key_usage.client_auth.to_string()),
+                ("Code signing".to_string(), extended_key_usage.code_signing.to_string()),
+                ("Email protection".to_string(), extended_key_usage.email_protection.to_string()),
+                ("Time stamping".to_string(), extended_key_usage.time_stamping.to_string()),
+                ("OCSP signing".to_string(), extended_key_usage.ocsp_signing.to_string()),
+                (
+                    "Other".to_string(),
+                    extended_key_usage.other.iter().map(|oid| {
+                        oid.to_id_string()
+                    }).collect::<Vec<String>>().join(", ")
+                )
+            ].to_vec()))
+        },
+        ParsedExtension::CRLDistributionPoints(crl_dist_points) => {
+            let concatenate_name = |name: &Vec<GeneralName> | -> String {
+                name.iter().map(
+                    |n| {n.to_string()}
+                ).collect::<Vec<String>>().join(" ")
+            };
+            Some(("CRL distribution points".to_string(),
+                Vec::from_iter(crl_dist_points.points.iter().map(
+                    |point| -> (String, String){
+                        (
+                            format!(
+                                "{}, {}",
+                                match &point.distribution_point {
+                                    Some(dpn) => match dpn {
+                                        DistributionPointName::FullName(name) => {
+                                            concatenate_name(name)
+                                        },
+                                        DistributionPointName::NameRelativeToCRLIssuer(_name) => {
+                                            "Relative distinguished name".to_string()
+                                        }
+                                    },
+                                    None => "No name".to_string()
+                                },
+                                match &point.crl_issuer {
+                                    Some(name) => concatenate_name(name),
+                                    None => "No issuer".to_string()
+                                }
+                            ),
+                            match &point.reasons {
+                                Some(flags) => interpret_reason_flags(flags),
+                                None => "No reasons for revocation".to_string()
+                            }
+                        )
+                    }
+                ))
+            ))
 
-        });
+        },
+        ParsedExtension::InhibitAnyPolicy(policy_inhibit_any) => {
+            Some(("Inhibit any policy".to_string(), [
+                ("Skip certs".to_string(), format_hex_from_u32(policy_inhibit_any.skip_certs))
+            ].to_vec()))
+        },
+        ParsedExtension::AuthorityInfoAccess(authority_info_access) => {
+            Some((
+                "Authority info access".to_string(),
+                Vec::from_iter(authority_info_access.accessdescs.iter().map(
+                    |description| -> (String, String) {
+                        (
+                            description.access_location.to_string(),
+                            description.access_method.to_id_string()
+                        )
+                    }))
+            ))
+        },
+        ParsedExtension::NSCertType(ns_type) => {
+            Some(("NS cert type".to_string(), [
+                ("SSL client".to_string(), ns_type.ssl_client().to_string()),
+                ("SSL server".to_string(), ns_type.ssl_server().to_string()),
+                ("Smine".to_string(), ns_type.smime().to_string()),
+                ("Object signing".to_string(), ns_type.object_signing().to_string()),
+                ("SSL CA".to_string(), ns_type.ssl_ca().to_string()),
+                ("Smine CA".to_string(), ns_type.smime_ca().to_string()),
+                ("Object signing CA".to_string(), ns_type.object_signing_ca().to_string()),
+            ].to_vec()))
+        },
+        ParsedExtension::NsCertComment(ns_cert_comment) => {
+            Some(("NS cert comment".to_string(), [
+                ("Comment".to_string(), ns_cert_comment.to_string())
+            ].to_vec()))
+        },
+        ParsedExtension::IssuingDistributionPoint(issuing_dist_point) => {
+            let point_name: String = match &issuing_dist_point.distribution_point {
+                None => "None".to_string(),
+                Some(name) => match name {
+                    DistributionPointName::FullName(general_names) => {
+                        general_names
+                            .iter().map(|gn| gn.to_string())
+                            .collect::<Vec<String>>().join(" ")
+                    },
+                    DistributionPointName::NameRelativeToCRLIssuer(_relative_name) =>
+                        "Relative distinguished name".to_string()
+                }
+            };
+            Some(("Issuing distribution point".to_string(), [
+                ("Point".to_string(), point_name),
+                ("Only contains user certs".to_string(), issuing_dist_point.only_contains_user_certs.to_string()),
+                ("Only contains CA certs".to_string(), issuing_dist_point.only_contains_ca_certs.to_string()),
+                ("Only some reasons".to_string(), match &issuing_dist_point.only_some_reasons {
+                    Some(flags) => interpret_reason_flags(&flags),
+                    None => "None".to_string()
+                }),
+                ("Indirect CRL".to_string(), issuing_dist_point.only_contains_user_certs.to_string()),
+                ("Only contains attribute certs".to_string(), issuing_dist_point.only_contains_ca_certs.to_string()),
+            ].to_vec()))
+        },
+        ParsedExtension::CRLNumber(crl_num) => {
+            Some(("CRL number".to_string(), [
+                ("Number".to_string(), crl_num.to_string())
+            ].to_vec()))
+        },
+        ParsedExtension::ReasonCode(code) => {
+            Some(("Reason code".to_string(), [
+                ("Code".to_string(), format_hex(&[code.0]))
+            ].to_vec()))
+        },
+        ParsedExtension::InvalidityDate(invalidity_date) => {
+            Some(("Invalidity date".to_string(), [
+                ("Date".to_string(), invalidity_date.to_string())
+            ].to_vec()))
+        },
+        ParsedExtension::SCT(timestamps) => {
+            Some((
+                "Signed cert timestamp(s)".to_string(),
+                Vec::from_iter(timestamps.iter().map(
+                    |sct: &SignedCertificateTimestamp| -> (String, String) {
+                        (
+                            format!("{}, {}",
+                                if sct.version == CtVersion::V1 {
+                                    "v1(0)".to_string()
+                                } else {
+                                    format_hex(&[sct.version.0])
+                                },
+                                format_hex(sct.id.key_id)
+                            ),
+                            format!("Timestamp: {}, Signature: {}",
+                                ASN1Time::from_timestamp(sct.timestamp.cast_signed()).unwrap().to_string(),
+                                format_hex(&sct.signature.data)
+                            )
+                        )
+                    }
+                ))
+            ))
+        },
+
+        ParsedExtension::UnsupportedExtension {oid} => {
+            Some(("Unsupported extension".to_string(), [
+                ("Extension ID".to_string(), oid.to_id_string())
+            ].to_vec()))
+        },
+        ParsedExtension::ParseError {error: _error} => {
+            None
+        },
+        ParsedExtension::Unparsed => {
+            None
+        },
+        _ => None
     }
-
-    Ok(VerboseCert{
-        base_cert: parse_der_cert(der_data)?,
-        extensions: extensions
-    })
 }
 
 fn extract_key_info(cert: &X509Certificate<'_>) -> (KeyType, u32) {

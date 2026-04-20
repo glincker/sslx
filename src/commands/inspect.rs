@@ -68,13 +68,17 @@ pub fn verbose_run_certs(certs: &[crate::cert::VerboseCert], json: bool, no_colo
 
     for c in certs.iter() {
         for e in c.extensions.iter() {
-            println!("{}: {}", e.0, e.1);
+            println!("--{}--", e.0);
+            for s in e.1 {
+                println!("{}: {}", s.0, s.1);
+            }
         }
     }
 
     Ok(exit_code_for_verbose_certs(certs))
 }
 
+// todo Use traits for this instead
 fn exit_code_for_verbose_certs(certs: &[crate::cert::VerboseCert]) -> i32 {
     if certs.iter().any(|c| c.is_expired()) {
         1 // expired

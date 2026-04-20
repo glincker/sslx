@@ -47,10 +47,9 @@ impl CertInfo {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
 pub struct VerboseCert {
     pub base_cert: CertInfo,
-    pub extensions: HashMap<String, String>
+    pub extensions: HashMap<String, Vec<(String, String)>>
 }
 
 impl VerboseCert {
