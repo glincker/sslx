@@ -62,16 +62,17 @@ fn exit_code_for_certs(certs: &[crate::cert::CertInfo]) -> i32 {
 }
 
 pub fn verbose_run_certs(certs: &[crate::cert::VerboseCert], json: bool, no_color: bool) -> Result<i32> {
+    let use_color = !no_color && !json && colors::should_color();
+
     if json {
         bail!("Verbose json output not yet supported")
     }
 
-    for c in certs.iter() {
-        for e in c.extensions.iter() {
-            println!("--{}--", e.0);
-            for s in e.1 {
-                println!("{}: {}", s.0, s.1);
-            }
+    let total = certs.len();
+    for (i, cert) in certs.iter().enumerate() {
+        println!("{}", terminal::render_verbose_cert(cert, i, total, use_color));
+        if i < total - 1 {
+            println!("{}", terminal::render_chain_arrow(use_color));
         }
     }
 
