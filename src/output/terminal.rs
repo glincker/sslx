@@ -13,7 +13,13 @@ pub fn render_cert(cert: &CertInfo, index: usize, total: usize, use_color: bool)
     lines.join("\n")
 }
 
-pub fn render_verbose_cert(cert: &VerboseCert, index: usize, total: usize, use_color: bool) -> String {
+/// Render a certificate verbosely with its extensions in a beautiful box
+pub fn render_verbose_cert(
+    cert: &VerboseCert,
+    index: usize,
+    total: usize,
+    use_color: bool,
+) -> String {
     let mut lines = Vec::new();
 
     render_cert_body(&cert.base_cert, &mut lines, index, total, use_color);
@@ -21,7 +27,13 @@ pub fn render_verbose_cert(cert: &VerboseCert, index: usize, total: usize, use_c
     for extension in &cert.extensions {
         // Header
         lines.push("".to_string());
-        add_row(&mut lines, extension.0.as_str(), "", colors::CYAN, use_color);
+        add_row(
+            &mut lines,
+            extension.0.as_str(),
+            "",
+            colors::CYAN,
+            use_color,
+        );
 
         // Content
         for content in extension.1 {
@@ -30,7 +42,7 @@ pub fn render_verbose_cert(cert: &VerboseCert, index: usize, total: usize, use_c
                 format!("  {}:", content.0).as_str(),
                 content.1.as_str(),
                 colors::DIM,
-                use_color
+                use_color,
             );
         }
     }
@@ -39,7 +51,14 @@ pub fn render_verbose_cert(cert: &VerboseCert, index: usize, total: usize, use_c
     lines.join("\n")
 }
 
-pub fn render_cert_body(cert: &CertInfo, lines: &mut Vec<String>, index: usize, total: usize, use_color: bool) -> () {
+// Render the header and main body of a certificate's box
+fn render_cert_body(
+    cert: &CertInfo,
+    lines: &mut Vec<String>,
+    index: usize,
+    total: usize,
+    use_color: bool,
+) {
     // Header
     let ca_label = if cert.is_ca { " (CA)" } else { "" };
     let header = format!(" Certificate {} of {}{} ", index + 1, total, ca_label);
@@ -58,8 +77,6 @@ pub fn render_cert_body(cert: &CertInfo, lines: &mut Vec<String>, index: usize, 
         top
     });
 
-
-
     add_row(lines, "Subject:", &cert.subject, "", use_color);
     add_row(lines, "Issuer:", &cert.issuer, colors::DIM, use_color);
     add_row(
@@ -67,7 +84,7 @@ pub fn render_cert_body(cert: &CertInfo, lines: &mut Vec<String>, index: usize, 
         "Serial:",
         &truncate_hex(&cert.serial_hex, 24),
         colors::DIM,
-        use_color
+        use_color,
     );
 
     // Empty line
@@ -134,11 +151,12 @@ pub fn render_cert_body(cert: &CertInfo, lines: &mut Vec<String>, index: usize, 
         "SHA-256:",
         &truncate_hex(&cert.sha256_fingerprint, 24),
         colors::DIM,
-        use_color
+        use_color,
     );
 }
 
-pub fn render_cert_bottom(lines: &mut Vec<String>, use_color: bool) {
+// Render the bottom (footer) of a certificate's box
+fn render_cert_bottom(lines: &mut Vec<String>, use_color: bool) {
     // Bottom border
     let bottom = format!(
         "{}{}{}",
@@ -153,8 +171,8 @@ pub fn render_cert_bottom(lines: &mut Vec<String>, use_color: bool) {
     });
 }
 
-// Content rows
-pub fn add_row (lines: &mut Vec<String>, label: &str, value: &str, color: &str, use_color: bool) -> () {
+// Add a row to content
+fn add_row(lines: &mut Vec<String>, label: &str, value: &str, color: &str, use_color: bool) {
     let content = format!("  {:<20}  {}", label, value);
     let pad = WIDTH.saturating_sub(content.len());
 

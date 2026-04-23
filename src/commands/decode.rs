@@ -3,7 +3,6 @@ use std::io::Read;
 
 use crate::output::{box_chars, colors};
 
-// TODO implement verbose throughout
 pub fn run(input: &str, json: bool, no_color: bool) -> Result<i32> {
     let use_color = !no_color && !json && colors::should_color();
 

@@ -239,7 +239,9 @@ fn main() {
 
 fn run(cli: Cli) -> anyhow::Result<i32> {
     match cli.command {
-        Commands::Inspect { file } => commands::inspect::run(&file, cli.json, cli.verbose, cli.no_color),
+        Commands::Inspect { file } => {
+            commands::inspect::run(&file, cli.json, cli.verbose, cli.no_color)
+        }
         Commands::Connect {
             host,
             sni,

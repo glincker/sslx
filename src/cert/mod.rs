@@ -2,8 +2,8 @@ pub mod chain;
 pub mod parser;
 pub mod tls;
 
-use std::collections::HashMap;
 use serde::Serialize;
+use std::collections::HashMap;
 use std::fmt;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -49,20 +49,15 @@ impl CertInfo {
 
 pub struct VerboseCert {
     pub base_cert: CertInfo,
-    pub extensions: HashMap<String, Vec<(String, String)>>
+    pub extensions: HashMap<String, Vec<(String, String)>>,
 }
 
+// This could be implemented using a trait, however this would require some refactoring
 impl VerboseCert {
-    pub fn days_remaining(&self) -> i64 {
-        self.base_cert.days_remaining()
-    }
+    // Days remaining and key description removed to keep clippy clean
 
     pub fn is_expired(&self) -> bool {
         self.base_cert.is_expired()
-    }
-
-    pub fn key_description(&self) -> String {
-        self.base_cert.key_description()
     }
 }
 
