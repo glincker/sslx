@@ -3,6 +3,7 @@ pub mod parser;
 pub mod tls;
 
 use serde::Serialize;
+use std::collections::HashMap;
 use std::fmt;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -43,6 +44,20 @@ impl CertInfo {
             KeyType::Ed25519 => "Ed25519".to_string(),
             KeyType::Unknown(name) => format!("{} ({} bit)", name, self.key_bits),
         }
+    }
+}
+
+pub struct VerboseCert {
+    pub base_cert: CertInfo,
+    pub extensions: HashMap<String, Vec<(String, String)>>,
+}
+
+// This could be implemented using a trait, however this would require some refactoring
+impl VerboseCert {
+    // Days remaining and key description removed to keep clippy clean
+
+    pub fn is_expired(&self) -> bool {
+        self.base_cert.is_expired()
     }
 }
 

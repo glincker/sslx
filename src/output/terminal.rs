@@ -1,15 +1,68 @@
-use crate::cert::CertInfo;
+use crate::cert::{CertInfo, VerboseCert};
 use crate::output::{box_chars, colors, expiry_display};
+
+const WIDTH: usize = 72;
 
 /// Render a certificate in a beautiful box
 pub fn render_cert(cert: &CertInfo, index: usize, total: usize, use_color: bool) -> String {
     let mut lines = Vec::new();
-    let width: usize = 56;
 
+    render_cert_body(cert, &mut lines, index, total, use_color);
+    render_cert_bottom(&mut lines, use_color);
+
+    lines.join("\n")
+}
+
+/// Render a certificate verbosely with its extensions in a beautiful box
+pub fn render_verbose_cert(
+    cert: &VerboseCert,
+    index: usize,
+    total: usize,
+    use_color: bool,
+) -> String {
+    let mut lines = Vec::new();
+
+    render_cert_body(&cert.base_cert, &mut lines, index, total, use_color);
+
+    for extension in &cert.extensions {
+        // Header
+        lines.push("".to_string());
+        add_row(
+            &mut lines,
+            extension.0.as_str(),
+            "",
+            colors::CYAN,
+            use_color,
+        );
+
+        // Content
+        for content in extension.1 {
+            add_row(
+                &mut lines,
+                format!("  {}:", content.0).as_str(),
+                content.1.as_str(),
+                colors::DIM,
+                use_color,
+            );
+        }
+    }
+    render_cert_bottom(&mut lines, use_color);
+
+    lines.join("\n")
+}
+
+// Render the header and main body of a certificate's box
+fn render_cert_body(
+    cert: &CertInfo,
+    lines: &mut Vec<String>,
+    index: usize,
+    total: usize,
+    use_color: bool,
+) {
     // Header
     let ca_label = if cert.is_ca { " (CA)" } else { "" };
     let header = format!(" Certificate {} of {}{} ", index + 1, total, ca_label);
-    let padding = width.saturating_sub(header.len() + 2);
+    let padding = WIDTH.saturating_sub(header.len() + 2);
     let top = format!(
         "{}{}{}{}{}",
         box_chars::TOP_LEFT,
@@ -24,49 +77,21 @@ pub fn render_cert(cert: &CertInfo, index: usize, total: usize, use_color: bool)
         top
     });
 
-    // Content rows
-    let add_row = |lines: &mut Vec<String>, label: &str, value: &str, color: &str| {
-        let content = format!("  {:<10}{}", label, value);
-        let pad = width.saturating_sub(content.len());
-        let row = format!(
-            "{}{}{} {}",
-            box_chars::VERTICAL,
-            content,
-            " ".repeat(pad),
-            box_chars::VERTICAL,
-        );
-        if use_color && !color.is_empty() {
-            let padding = " ".repeat(pad);
-            lines.push(format!(
-                "{}{}{}{} {}{}{}{}",
-                colors::CYAN,
-                box_chars::VERTICAL,
-                color,
-                content,
-                colors::CYAN,
-                padding,
-                box_chars::VERTICAL,
-                colors::RESET,
-            ));
-        } else {
-            lines.push(row);
-        }
-    };
-
-    add_row(&mut lines, "Subject:", &cert.subject, "");
-    add_row(&mut lines, "Issuer:", &cert.issuer, colors::DIM);
+    add_row(lines, "Subject:", &cert.subject, "", use_color);
+    add_row(lines, "Issuer:", &cert.issuer, colors::DIM, use_color);
     add_row(
-        &mut lines,
+        lines,
         "Serial:",
         &truncate_hex(&cert.serial_hex, 24),
         colors::DIM,
+        use_color,
     );
 
     // Empty line
     let empty = format!(
         "{}{} {}",
         box_chars::VERTICAL,
-        " ".repeat(width),
+        " ".repeat(WIDTH),
         box_chars::VERTICAL,
     );
     lines.push(if use_color {
@@ -81,7 +106,7 @@ pub fn render_cert(cert: &CertInfo, index: usize, total: usize, use_color: bool)
         cert.not_before.format("%Y-%m-%d"),
         cert.not_after.format("%Y-%m-%d"),
     );
-    add_row(&mut lines, "Valid:", &valid_range, "");
+    add_row(lines, "Valid:", &valid_range, "", use_color);
 
     // Expiry bar
     let expiry = expiry_display(cert.days_remaining(), use_color);
@@ -104,7 +129,7 @@ pub fn render_cert(cert: &CertInfo, index: usize, total: usize, use_color: bool)
     });
 
     // Key info
-    add_row(&mut lines, "Key:", &cert.key_description(), "");
+    add_row(lines, "Key:", &cert.key_description(), "", use_color);
 
     // SANs
     if !cert.sans.is_empty() {
@@ -117,22 +142,26 @@ pub fn render_cert(cert: &CertInfo, index: usize, total: usize, use_color: bool)
                 cert.sans.len() - 2
             )
         };
-        add_row(&mut lines, "SANs:", &sans_display, "");
+        add_row(lines, "SANs:", &sans_display, "", use_color);
     }
 
     // Fingerprint
     add_row(
-        &mut lines,
+        lines,
         "SHA-256:",
         &truncate_hex(&cert.sha256_fingerprint, 24),
         colors::DIM,
+        use_color,
     );
+}
 
+// Render the bottom (footer) of a certificate's box
+fn render_cert_bottom(lines: &mut Vec<String>, use_color: bool) {
     // Bottom border
     let bottom = format!(
         "{}{}{}",
         box_chars::BOTTOM_LEFT,
-        box_chars::HORIZONTAL.repeat(width + 2),
+        box_chars::HORIZONTAL.repeat(WIDTH + 2),
         box_chars::BOTTOM_RIGHT,
     );
     lines.push(if use_color {
@@ -140,8 +169,37 @@ pub fn render_cert(cert: &CertInfo, index: usize, total: usize, use_color: bool)
     } else {
         bottom
     });
+}
 
-    lines.join("\n")
+// Add a row to content
+fn add_row(lines: &mut Vec<String>, label: &str, value: &str, color: &str, use_color: bool) {
+    let content = format!("  {:<20}  {}", label, value);
+    let pad = WIDTH.saturating_sub(content.len());
+
+    let row = format!(
+        "{}{}{} {}",
+        box_chars::VERTICAL,
+        content,
+        " ".repeat(pad),
+        box_chars::VERTICAL,
+    );
+
+    if use_color && !color.is_empty() {
+        let padding = " ".repeat(pad);
+        lines.push(format!(
+            "{}{}{}{} {}{}{}{}",
+            colors::CYAN,
+            box_chars::VERTICAL,
+            color,
+            content,
+            colors::CYAN,
+            padding,
+            box_chars::VERTICAL,
+            colors::RESET,
+        ));
+    } else {
+        lines.push(row);
+    }
 }
 
 /// Render the "signed by" arrow between certs
