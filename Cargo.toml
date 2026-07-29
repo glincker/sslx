@@ -34,7 +34,7 @@ p12 = "0.6"
 anyhow = "1"
 
 # Base64 decoding
-base64 = "0.22"
+base64 = "0.23"
 
 # SHA-256 (ring is already pulled in by rustls, just making it explicit)
 ring = "0.17"
