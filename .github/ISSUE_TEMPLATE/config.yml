@@ -3,3 +3,6 @@ contact_links:
   - name: Questions
     url: https://github.com/glincker/sslx/discussions/categories/q-a
     about: Ask questions in Discussions
+  - name: "💬 Ask a question on Discord"
+    url: https://discord.gg/Ar5pcaZB99
+    about: "Questions and help from the community in the #sslx forum."

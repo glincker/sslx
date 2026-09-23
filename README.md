@@ -7,6 +7,7 @@ A single binary that handles certs, TLS connections, and all the stuff you norma
 [![crates.io](https://img.shields.io/crates/v/sslx.svg)](https://crates.io/crates/sslx)
 [![CI](https://github.com/glincker/sslx/actions/workflows/ci.yml/badge.svg)](https://github.com/glincker/sslx/actions)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/glincker/sslx/blob/main/LICENSE)
+[![Discord](https://img.shields.io/discord/829168897080557579?logo=discord&logoColor=white&label=discord&color=5865F2)](https://discord.gg/Ar5pcaZB99)
 
 ![sslx demo](demo.gif)
 
@@ -251,6 +252,12 @@ sslx completions bash > /etc/bash_completion.d/sslx
 sslx completions zsh > ~/.zsh/completions/_sslx
 sslx completions fish > ~/.config/fish/completions/sslx.fish
 ```
+
+## Community
+
+Join the GLINR Discord to ask questions, share feedback, or talk to other users. This project has its own forum channel, #sslx.
+
+<a href="https://discord.gg/Ar5pcaZB99"><img src="https://discord.com/api/guilds/829168897080557579/widget.png?style=banner2" alt="Join the GLINR Discord" /></a>
 
 ## Contributing
 
