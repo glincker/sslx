@@ -724,7 +724,7 @@ fn base64_decode(input: &str) -> Result<Vec<u8>> {
 }
 
 fn sha256_hex(data: &[u8]) -> String {
-    use ring::digest;
+    use aws_lc_rs::digest;
     let hash = digest::digest(&digest::SHA256, data);
     hash.as_ref()
         .iter()
