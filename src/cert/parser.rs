@@ -195,37 +195,33 @@ fn parse_der_extension(e: &X509Extension) -> Option<(String, Vec<(String, String
     within the extension
      */
     match e.parsed_extension() {
-        ParsedExtension::AuthorityKeyIdentifier(authority_key_id) => {
-            Some((
-                "Authority key identifier".to_string(),
-                [
-                    (
-                        "Key identifier".to_string(),
-                        match &authority_key_id.key_identifier {
-                            None => "None".to_string(),
-                            Some(id) => format_hex(id.0),
-                        },
-                    ),
-                    (
-                        "Authority cert issuer".to_string(),
-                        match &authority_key_id.authority_cert_issuer {
-                            None => "None".to_string(),
-                            Some(issuer) => {
-                                String::from_iter(issuer.iter().map(|gn| gn.to_string()))
-                            }
-                        },
-                    ),
-                    (
-                        "Authority cert serial".to_string(),
-                        match authority_key_id.authority_cert_serial {
-                            None => "None".to_string(),
-                            Some(serial) => format_hex(serial),
-                        },
-                    ),
-                ]
-                .to_vec(),
-            ))
-        }
+        ParsedExtension::AuthorityKeyIdentifier(authority_key_id) => Some((
+            "Authority key identifier".to_string(),
+            [
+                (
+                    "Key identifier".to_string(),
+                    match &authority_key_id.key_identifier {
+                        None => "None".to_string(),
+                        Some(id) => format_hex(id.0),
+                    },
+                ),
+                (
+                    "Authority cert issuer".to_string(),
+                    match &authority_key_id.authority_cert_issuer {
+                        None => "None".to_string(),
+                        Some(issuer) => String::from_iter(issuer.iter().map(|gn| gn.to_string())),
+                    },
+                ),
+                (
+                    "Authority cert serial".to_string(),
+                    match authority_key_id.authority_cert_serial {
+                        None => "None".to_string(),
+                        Some(serial) => format_hex(serial),
+                    },
+                ),
+            ]
+            .to_vec(),
+        )),
         ParsedExtension::SubjectKeyIdentifier(key_id) => Some((
             "Subject key identifier".to_string(),
             [("Subject key id".to_string(), format_hex(key_id.0))].to_vec(),
