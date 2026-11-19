@@ -16,8 +16,8 @@ clap_complete = "4"
 clap_mangen = "0.3"
 
 # Certificate parsing & generation
-x509-parser = { version = "0.18", features = ["verify"] }
-rcgen = "0.14"
+x509-parser = "0.18"
+rcgen = { version = "0.14", default-features = false, features = ["aws_lc_rs", "pem"] }
 
 # TLS
 rustls = "0.23"
@@ -36,8 +36,8 @@ anyhow = "1"
 # Base64 decoding
 base64 = "0.23"
 
-# SHA-256 (ring is already pulled in by rustls, just making it explicit)
-ring = "0.17"
+# SHA-256 (shared crypto implementation with rustls and rcgen)
+aws-lc-rs = "1.18"
 
 # Time (used by rcgen, shared dep)
 time = "0.3"

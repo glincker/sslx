@@ -95,7 +95,7 @@ fn render_cert_body(
         box_chars::VERTICAL,
     );
     lines.push(if use_color {
-        format!("{}{}{}", colors::CYAN, &empty, colors::RESET)
+        format!("{}{}{}", colors::CYAN, empty, colors::RESET)
     } else {
         empty.clone()
     });
